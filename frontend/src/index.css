@@ -1,0 +1,152 @@
+@import "tailwindcss";
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  overflow-x: hidden;
+  background: #f5f7f4;
+  color: #17211d;
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  line-height: 1.5;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.page-container {
+  width: min(100% - 2rem, 80rem);
+  margin-inline: auto;
+}
+
+@media (min-width: 640px) {
+  .page-container {
+    width: min(100% - 4rem, 80rem);
+  }
+}
+
+.site-content {
+  min-height: calc(100vh - 77px);
+  padding-bottom: 4rem;
+}
+
+.agent-workspace,
+.agent-workspace * {
+  min-width: 0;
+}
+
+.agent-workspace p,
+.agent-workspace h1,
+.agent-workspace h2,
+.agent-workspace h3,
+.agent-workspace h4,
+.agent-workspace dt,
+.agent-workspace dd,
+.agent-workspace button,
+.agent-workspace span {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .site-content {
+    padding-bottom: 2rem;
+  }
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+/* Shared dark action treatment for buttons and CTA links. */
+button[class*="bg-"],
+a[class*="bg-"] {
+  background-color: #172033 !important;
+  background-image: linear-gradient(120deg, #111827, #334155, #172033) !important;
+  background-size: 200% 200%;
+  color: #f8fafc !important;
+  transition: transform 180ms ease, box-shadow 180ms ease, background-position 500ms ease;
+  animation: action-gradient 7s ease infinite;
+}
+
+button[class*="bg-"]:hover,
+a[class*="bg-"]:hover {
+  background-position: 100% 50%;
+  box-shadow: 0 12px 24px rgb(15 23 42 / 18%);
+  transform: translateY(-2px);
+}
+
+button[class*="bg-"]:disabled {
+  animation: none;
+  transform: none;
+}
+
+::selection {
+  background: #b9e4d2;
+  color: #12362a;
+}
+
+/* Rebalance the starter purple palette into a calm support-operations theme. */
+.bg-purple-600 { background-color: #087f5b !important; }
+.bg-purple-700 { background-color: #056044 !important; }
+.bg-purple-50 { background-color: #e8f6ef !important; }
+.bg-purple-100 { background-color: #d5f0e3 !important; }
+.text-purple-600 { color: #087f5b !important; }
+.text-purple-700 { color: #056044 !important; }
+.text-purple-400 { color: #63d2a5 !important; }
+.text-purple-100 { color: #d5f0e3 !important; }
+.border-purple-200 { border-color: #b9e4d2 !important; }
+.hover\:bg-purple-700:hover { background-color: #056044 !important; }
+.hover\:text-purple-600:hover { color: #087f5b !important; }
+.focus\:border-purple-500:focus { border-color: #087f5b !important; }
+.focus\:ring-purple-100:focus { --tw-ring-color: #d5f0e3 !important; }
+.bg-indigo-600 { background-color: #087f5b !important; }
+.bg-indigo-700 { background-color: #056044 !important; }
+.text-indigo-600 { color: #087f5b !important; }
+.text-indigo-700 { color: #056044 !important; }
+.bg-indigo-100 { background-color: #d5f0e3 !important; }
+.bg-indigo-50 { background-color: #e8f6ef !important; }
+.border-indigo-100 { border-color: #b9e4d2 !important; }
+.from-purple-50 { --tw-gradient-from: #e8f6ef var(--tw-gradient-from-position) !important; }
+.to-indigo-50 { --tw-gradient-to: #fff8e8 var(--tw-gradient-to-position) !important; }
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes float-card {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes action-gradient {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+.animate-fade-up {
+  animation: fade-up 700ms ease-out both;
+}
+
+.animate-float {
+  animation: float-card 5s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up,
+  .animate-float,
+  button[class*="bg-"],
+  a[class*="bg-"] {
+    animation: none;
+  }
+}
