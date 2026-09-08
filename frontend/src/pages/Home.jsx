@@ -23,7 +23,7 @@ const steps = [
 
 function Home() {
   return (
-    <div className="min-h-screen overflow-hidden bg-[#f8faf9] text-slate-900">
+    <div className="min-h-screen overflow-hidden bg-[#61b088]">
       {/* HERO */}
       <section className="relative overflow-hidden bg-[#0b1f18] text-white">
         {/* Background decoration */}
@@ -158,7 +158,7 @@ function Home() {
       </section>
 
       {/* FEATURES */}
-      <section className="relative overflow-hidden border-y border-emerald-100 bg-linear-to-br from-emerald-50 via-white to-teal-50 py-20 lg:py-28">
+      <section className="relative overflow-hidden border-y border-emerald-100 bg-green-200 py-20 lg:py-28">
         <div className="absolute -right-40 top-0 h-96 w-96 rounded-full bg-emerald-200/20 blur-3xl" />
 
         <div className="page-container relative z-10 grid items-center gap-14 lg:grid-cols-[.8fr_1.2fr]">

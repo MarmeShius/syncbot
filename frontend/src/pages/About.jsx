@@ -1,19 +1,19 @@
 function About() {
   return (
-    <div className="bg-white">
+    <div className="bg-green-100">
 
       {/* Header */}
-      <section className="bg-linear-to-br from-purple-50 to-indigo-50 py-16 sm:py-20">
+      <section className="bg-green-200 py-16 sm:py-20">
 
         <div className="page-container max-w-4xl text-center">
 
-          <p className="font-semibold uppercase tracking-wider text-purple-600">
+          <p className="font-semibold uppercase tracking-wider text-green-600">
             About SyncBot
           </p>
 
           <h1 className="mt-3 text-4xl font-extrabold text-gray-900 sm:text-5xl">
             Making customer support
-            <span className="text-purple-600"> smarter.</span>
+            <span className="text-green-600"> smarter.</span>
           </h1>
 
           <p className="mt-6 text-lg leading-8 text-gray-600">

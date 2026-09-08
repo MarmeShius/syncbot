@@ -24,18 +24,18 @@ function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-purple-50 via-white to-indigo-50 py-10 sm:py-16">
+    <div className="flex min-h-screen items-center justify-center bg-green-200 px-4 py-4">
 
-      <div className="page-container grid overflow-hidden border-2 border-slate-200 bg-white shadow-2xl lg:grid-cols-2">
+      <div className="page-container grid w-full max-w-3xl overflow-hidden border-2 border-slate-200 bg-white shadow-2xl lg:grid-cols-2">
 
         {/* Left Side */}
-        <div className="hidden bg-purple-600 p-12 text-white lg:flex lg:flex-col lg:justify-between">
+        <div className="hidden bg-green-800 p-7 text-white lg:flex lg:flex-col lg:justify-between">
 
           <div>
 
             <div className="flex items-center gap-3">
 
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white text-xl font-bold text-purple-600">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-xl font-bold text-green-800">
                 S
               </div>
 
@@ -45,13 +45,13 @@ function Login() {
 
             </div>
 
-            <div className="mt-20">
+            <div className="mt-12">
 
-              <h2 className="text-4xl font-bold leading-tight">
+              <h2 className="text-3xl font-bold leading-tight">
                 Welcome back to smarter customer support.
               </h2>
 
-              <p className="mt-6 leading-7 text-purple-100">
+              <p className="mt-4 text-sm leading-6 text-green-100">
                 Sign in to manage your support requests, conversations, and
                 tickets with SyncBot.
               </p>
@@ -60,9 +60,9 @@ function Login() {
 
           </div>
 
-          <div className="rounded-2xl bg-purple-700 p-6">
+          <div className="rounded-xl bg-green-900/30 p-4">
 
-            <p className="text-sm leading-6 text-purple-100">
+            <p className="text-sm leading-6 text-green-100">
               🤖 SyncBot AI can help support agents analyze tickets and
               provide intelligent recommendations.
             </p>
@@ -72,27 +72,27 @@ function Login() {
         </div>
 
         {/* Login Form */}
-        <div className="min-w-0 p-6 sm:p-12">
+        <div className="min-w-0 p-5 sm:p-7">
 
           <div className="mx-auto max-w-md">
 
-            <div className="mb-8">
+            <div className="mb-5">
 
-              <p className="font-semibold text-purple-600">
+              <p className="text-sm font-semibold text-green-800">
                 WELCOME BACK
               </p>
 
-              <h2 className="mt-2 text-3xl font-bold text-gray-900">
+              <h2 className="mt-1 text-2xl font-bold text-gray-900">
                 Sign in to SyncBot
               </h2>
 
-              <p className="mt-2 text-gray-500">
+              <p className="mt-1 text-sm text-gray-500">
                 Enter your credentials to continue.
               </p>
 
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-5">
+            <form onSubmit={handleSubmit} className="space-y-3">
 
               {error && <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">{error}</p>}
 
@@ -101,7 +101,7 @@ function Login() {
 
                 <label
                   htmlFor="username"
-                  className="mb-2 block text-sm font-semibold text-gray-700"
+                  className="mb-1 block text-xs font-semibold text-gray-700"
                 >
                   Username
                 </label>
@@ -112,7 +112,7 @@ function Login() {
                   type="text"
                   placeholder="Enter your username"
                   required
-                  className="w-full rounded-xl border border-gray-300 px-4 py-3.5 outline-none transition focus:border-purple-500 focus:ring-4 focus:ring-purple-100"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none transition focus:border-green-500 focus:ring-4 focus:ring-green-100"
                 />
 
               </div>
@@ -120,18 +120,18 @@ function Login() {
               {/* Password */}
               <div>
 
-                <div className="mb-2 flex items-center justify-between">
+                <div className="mb-1 flex items-center justify-between">
 
                   <label
                     htmlFor="password"
-                    className="block text-sm font-semibold text-gray-700"
+                    className="block text-xs font-semibold text-gray-700"
                   >
                     Password
                   </label>
 
                   <button
                     type="button"
-                    className="text-sm font-medium text-purple-600 hover:text-purple-700"
+                    className="text-xs font-medium text-green-600 hover:text-green-700"
                   >
                     Forgot password?
                   </button>
@@ -144,7 +144,7 @@ function Login() {
                   type="password"
                   placeholder="Enter your password"
                   required
-                  className="w-full rounded-xl border border-gray-300 px-4 py-3.5 outline-none transition focus:border-purple-500 focus:ring-4 focus:ring-purple-100"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none transition focus:border-green-500 focus:ring-4 focus:ring-green-100"
                 />
 
               </div>
@@ -155,12 +155,12 @@ function Login() {
                 <input
                   id="remember"
                   type="checkbox"
-                  className="h-4 w-4 rounded border-gray-300 accent-purple-600"
+                  className="h-4 w-4 rounded border-gray-300 accent-green-600"
                 />
 
                 <label
                   htmlFor="remember"
-                  className="text-sm text-gray-600"
+                  className="text-xs text-gray-600"
                 >
                   Remember me
                 </label>
@@ -171,7 +171,7 @@ function Login() {
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full rounded-xl bg-purple-600 py-3.5 font-semibold text-white shadow-lg transition hover:bg-purple-700 hover:shadow-xl"
+                className="w-full rounded-lg bg-green-600 py-2.5 text-sm font-semibold text-white shadow-lg transition hover:bg-green-700 hover:shadow-xl"
               >
                 {submitting ? "Signing in..." : "Sign In"}
               </button>
@@ -179,13 +179,13 @@ function Login() {
             </form>
 
             {/* Register */}
-            <p className="mt-8 text-center text-sm text-gray-600">
+            <p className="mt-4 text-center text-xs text-gray-600">
 
               Don't have an account?{" "}
 
               <Link
                 to="/register"
-                className="font-semibold text-purple-600 hover:text-purple-700"
+                className="font-semibold text-green-600 hover:text-green-700"
               >
                 Create an account
               </Link>

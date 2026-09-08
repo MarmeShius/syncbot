@@ -171,11 +171,11 @@ function Agent() {
   ];
 
   return (
-    <div className="agent-workspace min-h-screen bg-slate-100 pb-12">
+    <div className="agent-workspace min-h-screen bg-green-200 pb-12">
 
       {/* HEADER */}
       <header className="border-b bg-slate-950 text-white">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-5 sm:px-6">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-5 sm:px-6">
 
           <div>
             <p className="text-xs font-bold uppercase tracking-[0.2em] text-indigo-300">
@@ -187,7 +187,7 @@ function Agent() {
             </h1>
           </div>
 
-          <span className="rounded-full bg-white/10 px-4 py-2 text-sm">
+          <span className="max-w-full truncate rounded-full bg-white/10 px-4 py-2 text-sm">
             {user?.email}
           </span>
 

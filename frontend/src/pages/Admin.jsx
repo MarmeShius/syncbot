@@ -276,14 +276,14 @@ function Admin() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
+    <div className="min-h-screen bg-green-200 flex">
 
       {/* Sidebar */}
       <aside className="hidden lg:flex w-64 bg-gray-900 text-white flex-col fixed h-screen">
 
         <div className="p-6 border-b border-gray-700">
 
-          <h1 className="text-2xl font-bold text-purple-400">
+          <h1 className="text-2xl font-bold text-green-800">
             SyncBot
           </h1>
 
@@ -299,7 +299,7 @@ function Admin() {
             onClick={() => setActiveSection("dashboard")}
             className={`w-full text-left px-4 py-3 rounded-lg ${
               activeSection === "dashboard"
-                ? "bg-purple-600"
+                ? "bg-green-800"
                 : "hover:bg-gray-800"
             }`}
           >
@@ -310,7 +310,7 @@ function Admin() {
             onClick={() => setActiveSection("users")}
             className={`w-full text-left px-4 py-3 rounded-lg ${
               activeSection === "users"
-                ? "bg-purple-600"
+                ? "bg-green-800"
                 : "hover:bg-gray-800"
             }`}
           >
@@ -321,7 +321,7 @@ function Admin() {
             onClick={() => setActiveSection("tickets")}
             className={`w-full text-left px-4 py-3 rounded-lg ${
               activeSection === "tickets"
-                ? "bg-purple-600"
+                ? "bg-green-800"
                 : "hover:bg-gray-800"
             }`}
           >
@@ -332,7 +332,7 @@ function Admin() {
             onClick={() => setActiveSection("categories")}
             className={`w-full text-left px-4 py-3 rounded-lg ${
               activeSection === "categories"
-                ? "bg-purple-600"
+                ? "bg-green-800"
                 : "hover:bg-gray-800"
             }`}
           >
@@ -345,7 +345,7 @@ function Admin() {
 
           <div className="flex items-center gap-3">
 
-            <div className="w-10 h-10 rounded-full bg-purple-600 flex items-center justify-center font-bold">
+            <div className="w-10 h-10 rounded-full bg-green-800 flex items-center justify-center font-bold">
               {user?.name?.slice(0, 2).toUpperCase() || "AD"}
             </div>
 
@@ -389,11 +389,24 @@ function Admin() {
 
           </div>
 
-          <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
+          <div className="w-10 h-10 rounded-full bg-green-100 text-green-800 flex items-center justify-center font-bold">
             {user?.name?.slice(0, 2).toUpperCase() || "AD"}
           </div>
 
         </header>
+
+        <nav className="flex gap-2 overflow-x-auto border-b bg-white px-4 py-3 lg:hidden" aria-label="Admin sections">
+          {["dashboard", "users", "tickets", "categories"].map((section) => (
+            <button
+              key={section}
+              type="button"
+              onClick={() => setActiveSection(section)}
+              className={`shrink-0 rounded-lg px-3 py-2 text-sm font-semibold capitalize ${activeSection === section ? "bg-green-800 text-white" : "bg-gray-100 text-gray-700"}`}
+            >
+              {section}
+            </button>
+          ))}
+        </nav>
 
         {error && <div className="mx-4 mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 sm:mx-6">{error}</div>}
         {loading && <div className="p-8 text-center text-sm text-gray-500">Loading live admin data...</div>}
@@ -425,7 +438,7 @@ function Admin() {
                     Customers
                   </p>
 
-                  <h3 className="text-3xl font-bold mt-2 text-blue-600">
+                  <h3 className="text-3xl font-bold mt-2 text-blue-900">
                     {customerCount}
                   </h3>
 
@@ -439,7 +452,7 @@ function Admin() {
                     Support Agents
                   </p>
 
-                  <h3 className="text-3xl font-bold mt-2 text-purple-600">
+                  <h3 className="text-3xl font-bold mt-2 text-green-800">
                     {agentCount}
                   </h3>
 
@@ -514,7 +527,7 @@ function Admin() {
 
                       <div className="w-full bg-gray-100 rounded-full h-2">
                         <div
-                          className="bg-green-500 h-2 rounded-full"
+                          className="bg-green-800 h-2 rounded-full"
                           style={{
                             width: `${Math.min(
                               resolvedTickets * 20,
@@ -595,7 +608,7 @@ function Admin() {
 
                   <button
                     onClick={() => setActiveSection("tickets")}
-                    className="text-purple-600 text-sm font-semibold"
+                    className="text-green-800 text-sm font-semibold"
                   >
                     View All
                   </button>
@@ -611,7 +624,7 @@ function Admin() {
 
                       <div>
 
-                        <p className="text-purple-600 text-sm font-semibold">
+                        <p className="text-green-800 text-sm font-semibold">
                           {ticket.id}
                         </p>
 
@@ -676,7 +689,8 @@ function Admin() {
 
                 <div className="overflow-x-auto">
 
-                  <table className="w-full min-w-255">
+                  <div className="overflow-x-auto">
+                  <table className="w-full min-w-160">
 
                     <thead className="bg-gray-50 border-b">
 
@@ -795,6 +809,7 @@ function Admin() {
                     </tbody>
 
                   </table>
+                  </div>
 
                 </div>
 
@@ -823,7 +838,8 @@ function Admin() {
 
                 <div className="overflow-x-auto">
 
-                  <table className="w-full min-w-250">
+                  <div className="overflow-x-auto">
+                  <table className="w-full min-w-160">
 
                     <thead className="bg-gray-50 border-b">
 
@@ -865,7 +881,7 @@ function Admin() {
 
                           <td className="px-5 py-4">
 
-                            <p className="font-semibold text-purple-600">
+                            <p className="font-semibold text-green-800">
                               {ticket.id}
                             </p>
 
@@ -917,6 +933,7 @@ function Admin() {
                     </tbody>
 
                   </table>
+                  </div>
 
                 </div>
 
@@ -968,7 +985,7 @@ function Admin() {
 
                     <button
                       onClick={addCategory}
-                      className="w-full bg-purple-600 text-white py-3 rounded-lg font-semibold hover:bg-purple-700"
+                      className="w-full bg-green-800 text-white py-3 rounded-lg font-semibold hover:bg-green-700"
                     >
                       + Add Category
                     </button>
@@ -1008,7 +1025,7 @@ function Admin() {
                               {category.description}
                             </p>
 
-                            <p className="text-xs text-purple-600 mt-2">
+                            <p className="text-xs text-green-800 mt-2">
                               {category.tickets} tickets
                             </p>
 

@@ -12,7 +12,7 @@ function Navbar() {
 
   return (
     <nav className="sticky top-0 z-50 border-b border-emerald-100 bg-[#fbfcfa]/95 backdrop-blur">
-      <div className="page-container flex min-h-20 items-center justify-between gap-6">
+      <div className="page-container flex min-h-20 items-center justify-between gap-4 px-4 sm:gap-6 md:justify-center md:gap-24 lg:gap-32">
 
         {/* Logo */}
         <Link to="/" className="flex items-center gap-3">
@@ -68,11 +68,15 @@ function Navbar() {
               Login
             </Link>
 
-            <Link
+           <Link
               to="/register"
-              className="rounded-lg bg-emerald-700 px-5 py-2.5 font-semibold text-white shadow-md shadow-emerald-900/10 transition hover:bg-emerald-800 hover:shadow-lg"
+              className={`font-medium transition ${
+                isActive("/register")
+                  ? "text-emerald-700"
+                    : "text-slate-600 hover:text-emerald-700"
+              }`}
             >
-              Register
+             Register
             </Link>
           </>}
 
@@ -106,11 +110,17 @@ function Navbar() {
         </button>
 
       </div>
-      {mobileOpen && <div className="border-t border-slate-200 bg-white px-6 py-4 md:hidden">
+      {mobileOpen && <div className="border-t border-slate-200 bg-white px-4 py-4 md:hidden">
         <div className="page-container flex flex-col gap-4 py-1 text-sm font-semibold text-slate-700">
           <Link className="hover:text-emerald-700" onClick={() => setMobileOpen(false)} to="/">Home</Link>
           <Link className="hover:text-emerald-700" onClick={() => setMobileOpen(false)} to="/about">About Us</Link>
-          {user ? <Link className="hover:text-emerald-700" onClick={() => setMobileOpen(false)} to={`/${user.role}`}>{user.role === "agent" ? "Agent Workspace" : user.role === "admin" ? "Admin Workspace" : "My Tickets"}</Link> : <Link className="hover:text-emerald-700" onClick={() => setMobileOpen(false)} to="/login">Login</Link>}
+          {user ? <>
+            <Link className="hover:text-emerald-700" onClick={() => setMobileOpen(false)} to={`/${user.role}`}>{user.role === "agent" ? "Agent Workspace" : user.role === "admin" ? "Admin Workspace" : "My Tickets"}</Link>
+            <button type="button" className="text-left hover:text-emerald-700" onClick={() => { setMobileOpen(false); logout(); navigate("/"); }}>Log out</button>
+          </> : <>
+            <Link className="hover:text-emerald-700" onClick={() => setMobileOpen(false)} to="/login">Login</Link>
+            <Link className="hover:text-emerald-700" onClick={() => setMobileOpen(false)} to="/register">Register</Link>
+          </>}
         </div>
       </div>}
     </nav>
