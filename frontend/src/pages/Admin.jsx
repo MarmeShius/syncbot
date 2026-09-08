@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { apiRequest } from "../api";
+import { useAuth } from "../context/useAuth";
 
 function Admin() {
+  const { user } = useAuth();
   const [activeSection, setActiveSection] = useState("dashboard");
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
@@ -344,12 +346,12 @@ function Admin() {
           <div className="flex items-center gap-3">
 
             <div className="w-10 h-10 rounded-full bg-purple-600 flex items-center justify-center font-bold">
-              MA
+              {user?.name?.slice(0, 2).toUpperCase() || "AD"}
             </div>
 
             <div>
               <p className="font-semibold">
-                Maryam Admin
+                {user?.name || "Administrator"}
               </p>
 
               <p className="text-xs text-gray-400">
@@ -388,7 +390,7 @@ function Admin() {
           </div>
 
           <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center font-bold">
-            MA
+            {user?.name?.slice(0, 2).toUpperCase() || "AD"}
           </div>
 
         </header>

@@ -81,7 +81,7 @@ function Navbar() {
               to={`/${user.role}`}
               className="rounded-lg bg-emerald-700 px-5 py-2.5 font-semibold text-white shadow-md shadow-emerald-900/10 transition hover:bg-emerald-800 hover:shadow-lg"
             >
-              {user.role === "agent" ? "Agent Workspace" : user.role === "admin" ? "Admin Dashboard" : "My Tickets"}
+              {user.role === "agent" ? "Agent Workspace" : user.role === "admin" ? "Admin Workspace" : "My Tickets"}
             </Link>
             <button
               type="button"
@@ -110,7 +110,7 @@ function Navbar() {
         <div className="page-container flex flex-col gap-4 py-1 text-sm font-semibold text-slate-700">
           <Link className="hover:text-emerald-700" onClick={() => setMobileOpen(false)} to="/">Home</Link>
           <Link className="hover:text-emerald-700" onClick={() => setMobileOpen(false)} to="/about">About Us</Link>
-          {user ? <Link className="hover:text-emerald-700" onClick={() => setMobileOpen(false)} to={`/${user.role}`}>{user.role === "agent" ? "Agent Workspace" : user.role === "admin" ? "Admin Dashboard" : "My Tickets"}</Link> : <Link className="hover:text-emerald-700" onClick={() => setMobileOpen(false)} to="/login">Login</Link>}
+          {user ? <Link className="hover:text-emerald-700" onClick={() => setMobileOpen(false)} to={`/${user.role}`}>{user.role === "agent" ? "Agent Workspace" : user.role === "admin" ? "Admin Workspace" : "My Tickets"}</Link> : <Link className="hover:text-emerald-700" onClick={() => setMobileOpen(false)} to="/login">Login</Link>}
         </div>
       </div>}
     </nav>
