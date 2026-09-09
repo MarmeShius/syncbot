@@ -13,7 +13,17 @@ const statuses = ["Open", "In Progress", "Waiting for Customer", "Resolved", "Cl
 const priorities = ["Low", "Medium", "High", "Critical"];
 const memory = { users: [], tickets: [], nextTicket: 1001 };
 
-app.use(cors({ origin: process.env.CLIENT_URL || "http://localhost:5173" }));
+const allowedOrigins = [
+  process.env.CLIENT_URL,
+  "http://localhost:5173",
+].filter(Boolean);
+
+app.use(
+  cors({
+    origin: allowedOrigins,
+    credentials: true,
+  })
+);
 app.use(express.json({ limit: "1mb" }));
 
 const userSchema = new mongoose.Schema({
