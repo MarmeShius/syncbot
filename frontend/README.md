@@ -279,7 +279,7 @@ POST /api/tickets/:id/ai-analysis
 Backend loads the ticket from MongoDB
         |
         v
-Backend sends ticket context to OpenAI
+Backend sends ticket context to Gemini
         |
         v
 Backend returns structured analysis
@@ -306,9 +306,9 @@ The result contains:
 - Suggested response
 - Recommended next action
 
-The OpenAI key is never used in the browser. It stays in the backend environment file.
+The Gemini key is never used in the browser. It stays in the backend environment file.
 
-If there is no OpenAI key, the backend returns a local fallback response. This is useful for local development and prevents unexpected API charges.
+If there is no Gemini key, the backend returns a local fallback response. This is useful for local development and prevents unexpected API charges.
 
 ## Customer assistant
 
@@ -351,7 +351,7 @@ Never put these values in the frontend:
 
 - MongoDB password
 - JWT secret
-- OpenAI API key
+- Gemini API key
 - Staff password
 
 These belong only in the backend environment.
@@ -556,7 +556,7 @@ Internal messages use `kind: "note"` and are filtered from customer responses.
 - Agent and admin routes are protected.
 - Internal notes are not shown to customers.
 - MongoDB credentials stay on the backend.
-- OpenAI credentials stay on the backend.
+- Gemini credentials stay on the backend.
 - Environment files are ignored by Git.
 - Input is checked before creating or updating tickets.
 
@@ -583,8 +583,8 @@ PORT=5000
 CLIENT_URL=https://your-frontend-domain.vercel.app
 JWT_SECRET=your-production-secret
 MONGO_URI=your-atlas-connection-string
-OPENAI_API_KEY=your-openai-key-if-used
-OPENAI_MODEL=gpt-4o-mini
+GEMINI_API_KEY=your-gemini-api-key
+GEMINI_MODEL=gemini-3.8-flash
 ```
 
 Do not upload the real `.env` file to GitHub. Add the values directly in Render's environment settings.

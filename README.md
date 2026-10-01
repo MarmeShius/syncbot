@@ -46,7 +46,7 @@ The public registration page creates customer accounts only. Agent and admin acc
 - Mongoose for MongoDB models
 - JWT for login sessions
 - bcrypt for password hashing
-- OpenAI API for optional AI responses
+- Gemini API for optional AI responses
 
 ## Project folders
 
@@ -83,8 +83,13 @@ PORT=5000
 CLIENT_URL=http://localhost:5173
 JWT_SECRET=put-a-long-random-secret-here
 MONGO_URI=mongodb+srv://DATABASE_USER:DATABASE_PASSWORD@YOUR_CLUSTER.mongodb.net/syncbot?retryWrites=true&w=majority
-OPENAI_API_KEY=
-OPENAI_MODEL=gpt-4o-mini
+GEMINI_API_KEY=
+GEMINI_MODEL=gemini-3.8-flash
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASS=
+EMAIL_FROM=
 ```
 
 Do not commit `backend/.env` to GitHub. It contains passwords and private keys.
@@ -149,6 +154,14 @@ STAFF_ROLE=admin
 
 After the account is created, remove the `STAFF_*` values from `.env`. The password is saved as a hash in MongoDB, not as plain text.
 
+## Email notifications
+
+SyncBot sends a welcome email to new customers, notifies active admins about registrations, and sends a sign-in alert to the email address of each user who successfully logs in. It also confirms new tickets to customers, emails support staff and assigned agents, notifies the other participant when a customer or agent replies, and emails customers when a ticket status changes. Resolving a ticket sends the resolution and rating message. An automatic status change caused by an agent reply is included in that reply notification.
+
+Email delivery uses SMTP. Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, and `EMAIL_FROM` in `backend/.env` for a local backend, or in the project-root `.env` for Docker Compose. Use SMTP credentials and a sender address approved by your email provider; keep the password private and out of Git. Port `587` is the default, and port `465` uses a secure SMTP connection.
+
+Without SMTP settings, local development logs a simulation and Docker production logs an error; neither delivers real email. After updating Docker environment values or email code, run `docker compose up -d --build backend` from the project root.
+
 ## AI feature
 
 The important AI feature is inside the Agent Dashboard.
@@ -156,7 +169,7 @@ The important AI feature is inside the Agent Dashboard.
 1. A customer creates a real ticket.
 2. The agent opens that ticket.
 3. The agent clicks **Analyze with AI**.
-4. The backend sends the ticket subject, description, category, priority, status, and recent conversation to OpenAI.
+4. The backend sends the ticket subject, description, category, priority, status, and recent conversation to Gemini.
 5. The agent gets:
    - A short summary
    - Suggested category
@@ -165,9 +178,9 @@ The important AI feature is inside the Agent Dashboard.
    - Suggested response
    - Recommended next action
 
-The OpenAI key is only used by the backend. It is never placed in React.
+The Gemini key is only used by the backend. It is never placed in React.
 
-If `OPENAI_API_KEY` is empty, the app uses a local fallback. This lets the evaluator run the project without paying for an API call. When an OpenAI key is available, the response comes from OpenAI.
+If `GEMINI_API_KEY` is empty, the app uses a local fallback. This lets the evaluator run the project without paying for an API call. When a Gemini key is available, AI responses come from Gemini.
 
 There is also a small customer support chatbot for general questions. It is different from the Agent ticket analysis feature.
 
@@ -313,8 +326,8 @@ PORT=5000
 CLIENT_URL=https://YOUR-FRONTEND-DOMAIN.vercel.app
 JWT_SECRET=your-production-random-secret
 MONGO_URI=your-mongodb-atlas-uri
-OPENAI_API_KEY=your-openai-key-if-used
-OPENAI_MODEL=gpt-4o-mini
+GEMINI_API_KEY=your-gemini-api-key
+GEMINI_MODEL=gemini-3.8-flash
 ```
 
 Do not put `STAFF_PASSWORD` in GitHub. Create the staff account privately before or after deployment using the backend command, or create it directly in the database with the password hashed by the application.
@@ -340,7 +353,7 @@ After changing `CLIENT_URL`, redeploy the backend. Otherwise the browser may blo
 - The current automated tests cover important authentication, authorization, ticket, and login behavior. More end-to-end browser tests can be added later.
 - File attachment storage is not finished.
 - The admin page still needs full API-backed user and category management.
-- Email notifications are not included.
+- Real email delivery requires SMTP settings in the environment file used to start the backend.
 - AI responses should always be checked by an agent before sending them to a customer.
 
 ## AI build log
@@ -358,3 +371,21 @@ It helped with:
 I changed and checked the generated code myself. I also fixed issues with fake data, role access, MongoDB environment files, text overflow, and the agent/customer AI separation.
 
 The project was checked with frontend build and lint commands, backend syntax checks, MongoDB connection checks, and manual customer-to-agent ticket tests.
+
+## Run with Docker
+
+Install Docker Desktop, then copy `.env.example` to `.env` in the project root. Set `JWT_SECRET` to a long random value. The Gemini key is optional.
+
+Start the complete app, including MongoDB, with:
+
+```powershell
+docker compose up --build -d
+```
+
+Open `http://localhost:8080`. The Compose setup runs the frontend, backend, and MongoDB together; it keeps MongoDB data and uploaded attachments in named volumes. To stop the services while keeping data, run `docker compose down`. To follow logs, run `docker compose logs -f`.
+
+## CI/CD with GitHub Actions
+
+The workflow in `.github/workflows/ci-cd.yml` runs on pull requests and pushes to `main`. It installs dependencies from both lockfiles, runs backend and frontend tests, lints and builds the frontend, and then builds and publishes the frontend and backend Docker images to GitHub Container Registry (GHCR) after a successful push to `main`. Images are tagged `latest` and with the commit SHA. The publish job uses the built-in `GITHUB_TOKEN` with package write permission; no registry password is needed.
+
+To enable publishing, push this repository to GitHub and allow the repository's Actions workflow to write packages. Image publishing is continuous delivery; deploying those images to a hosting provider or server requires adding that destination's deployment credentials and deployment step.

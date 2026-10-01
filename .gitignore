@@ -9,6 +9,9 @@
 # Dependencies
 node_modules/
 
+# Customer and ticket attachments should stay out of Git
+**/uploads/
+
 # Build output
 dist/
 build/

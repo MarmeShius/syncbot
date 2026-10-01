@@ -1,1060 +1,690 @@
 import { useEffect, useState } from "react";
+import {
+  BarChart3,
+  Users,
+  Ticket,
+  Settings,
+  Search,
+  Activity,
+} from "lucide-react";
 import { apiRequest } from "../api";
 import { useAuth } from "../context/useAuth";
+import { useSocket } from "../context/useSocket";
+import SlaBadge from "../components/SlaBadge";
 
 function Admin() {
   const { user } = useAuth();
-  const [activeSection, setActiveSection] = useState("dashboard");
+  const { socket } = useSocket();
+  const [activeSection, setActiveSection] = useState("analytics");
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
 
   const [users, setUsers] = useState([]);
-  /* API data replaces the old local demo records. */
   const [tickets, setTickets] = useState([]);
-  const [categories, setCategories] = useState([]);
-  /*
-    {
-      id: 1,
-      name: "Ali Raza",
-      email: "ali@example.com",
-      role: "Customer",
-      status: "Active",
-      joined: "Sep 01, 2026",
-    },
-    {
-      id: 2,
-      name: "Hina Khan",
-      email: "hina@example.com",
-      role: "Customer",
-      status: "Active",
-      joined: "Aug 28, 2026",
-    },
-    {
-      id: 3,
-      name: "Sarah Ahmed",
-      email: "sarah@syncbot.com",
-      role: "Agent",
-      status: "Active",
-      joined: "Aug 15, 2026",
-    },
-    {
-      id: 4,
-      name: "John Smith",
-      email: "john@syncbot.com",
-      role: "Agent",
-      status: "Active",
-      joined: "Aug 10, 2026",
-    },
-    {
-      id: 5,
-      name: "Maryam Admin",
-      email: "admin@syncbot.com",
-      role: "Administrator",
-      status: "Active",
-      joined: "Aug 01, 2026",
-    },
-  ]);
+  const [analytics, setAnalytics] = useState(null);
 
-  const [legacyTickets] = useState([
-    {
-      id: "TKT-1001",
-      subject: "Unable to login to my account",
-      customer: "Ali Raza",
-      category: "Account",
-      priority: "High",
-      status: "Open",
-      agent: "Sarah Ahmed",
-    },
-    {
-      id: "TKT-1002",
-      subject: "Payment was deducted twice",
-      customer: "Hina Khan",
-      category: "Billing",
-      priority: "Critical",
-      status: "In Progress",
-      agent: "Sarah Ahmed",
-    },
-    {
-      id: "TKT-1003",
-      subject: "Application keeps crashing",
-      customer: "Usman Tariq",
-      category: "Technical Issue",
-      priority: "High",
-      status: "Waiting for Customer",
-      agent: "John Smith",
-    },
-    {
-      id: "TKT-1004",
-      subject: "Question about premium plan",
-      customer: "Ayesha Malik",
-      category: "Product",
-      priority: "Medium",
-      status: "Resolved",
-      agent: "John Smith",
-    },
-    {
-      id: "TKT-1005",
-      subject: "General product inquiry",
-      customer: "Hamza Ali",
-      category: "General Inquiry",
-      priority: "Low",
-      status: "Open",
-      agent: "Sarah Ahmed",
-    },
-  ]);
+  const [systemSettings, setSystemSettings] = useState({ autoAssignEnabled: true });
 
-  const [legacyCategories, setLegacyCategories] = useState([
-    {
-      id: 1,
-      name: "Technical Issue",
-      description: "Problems related to technical functionality.",
-      tickets: 18,
-    },
-    {
-      id: 2,
-      name: "Billing",
-      description: "Payments, invoices and billing problems.",
-      tickets: 12,
-    },
-    {
-      id: 3,
-      name: "Account",
-      description: "Login, account and profile issues.",
-      tickets: 9,
-    },
-    {
-      id: 4,
-      name: "Product",
-      description: "Questions about products and features.",
-      tickets: 15,
-    },
-    {
-      id: 5,
-      name: "General Inquiry",
-      description: "General customer questions.",
-      tickets: 7,
-    },
-  ]);
-  */
 
-  useEffect(() => {
-    async function loadAdminData() {
-      try {
-        const [userResult, ticketResult, categoryResult] = await Promise.all([
+  async function loadData() {
+    try {
+      const [userResult, ticketResult, analyticsResult, settingsResult] =
+        await Promise.all([
           apiRequest("/admin/users"),
           apiRequest("/tickets?limit=50"),
-          apiRequest("/categories"),
+          apiRequest("/analytics/dashboard"),
+          apiRequest("/admin/settings").catch(() => ({ settings: { autoAssignEnabled: true } })),
         ]);
-        setUsers(userResult.users.map((item) => ({
+
+      setUsers(
+        userResult.users.map((item) => ({
           ...item,
           role: item.role.charAt(0).toUpperCase() + item.role.slice(1),
           status: item.active ? "Active" : "Suspended",
           joined: item.createdAt ? new Date(item.createdAt).toLocaleDateString() : "-",
-        })));
-        setTickets(ticketResult.tickets.map((item) => ({
+        }))
+      );
+
+      setTickets(
+        ticketResult.tickets.map((item) => ({
           ...item,
-          customer: item.customer?.name || "Customer",
-          agent: item.assignedAgent?.name || "Unassigned",
-        })));
-        setCategories(categoryResult.categories.map((name, index) => ({ id: index + 1, name, description: "Support category", tickets: ticketResult.tickets.filter((ticket) => ticket.category === name).length })));
-      } catch (loadError) {
-        setError(loadError.message);
-      } finally {
-        setLoading(false);
-      }
+          customerName: item.customer?.name || "Customer",
+          agentName: item.assignedAgent?.name || "Unassigned",
+        }))
+      );
+
+      setAnalytics(analyticsResult);
+      if (settingsResult.settings) setSystemSettings(settingsResult.settings);
+    } catch (loadError) {
+      setError(loadError.message);
     }
-    loadAdminData();
+  }
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      loadData();
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
 
-  const [newCategory, setNewCategory] = useState("");
-  const [newCategoryDescription, setNewCategoryDescription] =
-    useState("");
+  // WebSockets: Real-time update for Admin
+  useEffect(() => {
+    if (!socket) return;
+    const handleUpdate = () => {
+      apiRequest("/tickets?limit=50").then((res) => {
+        setTickets(
+          res.tickets.map((item) => ({
+            ...item,
+            customerName: item.customer?.name || "Customer",
+            agentName: item.assignedAgent?.name || "Unassigned",
+          }))
+        );
+      }).catch(() => {});
 
-  const totalUsers = users.length;
+      apiRequest("/analytics/dashboard").then((data) => {
+        setAnalytics(data);
+      }).catch(() => {});
+    };
 
-  const customerCount = users.filter(
-    (user) => user.role === "Customer"
-  ).length;
+    socket.on("ticket:created", handleUpdate);
+    socket.on("ticket:updated", handleUpdate);
+    socket.on("ticket:csat", handleUpdate);
 
-  const agentCount = users.filter(
-    (user) => user.role === "Agent"
-  ).length;
-
-  const activeTickets = tickets.filter(
-    (ticket) =>
-      ticket.status !== "Resolved" &&
-      ticket.status !== "Closed"
-  ).length;
-
-  const resolvedTickets = tickets.filter(
-    (ticket) => ticket.status === "Resolved"
-  ).length;
-
-  const filteredUsers = users.filter(
-    (user) =>
-      user.name.toLowerCase().includes(search.toLowerCase()) ||
-      user.email.toLowerCase().includes(search.toLowerCase()) ||
-      user.role.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const filteredTickets = tickets.filter(
-    (ticket) =>
-      ticket.id.toLowerCase().includes(search.toLowerCase()) ||
-      ticket.subject.toLowerCase().includes(search.toLowerCase()) ||
-      ticket.customer.toLowerCase().includes(search.toLowerCase()) ||
-      ticket.category.toLowerCase().includes(search.toLowerCase())
-  );
+    return () => {
+      socket.off("ticket:created", handleUpdate);
+      socket.off("ticket:updated", handleUpdate);
+      socket.off("ticket:csat", handleUpdate);
+    };
+  }, [socket]);
 
   const changeUserRole = async (id, role) => {
     try {
-      const result = await apiRequest(`/admin/users/${id}`, { method: "PATCH", body: JSON.stringify({ role: role.toLowerCase() }) });
-      setUsers((currentUsers) => currentUsers.map((item) => item.id === id ? { ...item, role, status: result.user.active ? "Active" : "Suspended" } : item));
-    } catch (updateError) { setError(updateError.message); }
+      const result = await apiRequest(`/admin/users/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ role: role.toLowerCase() }),
+      });
+      setUsers((current) =>
+        current.map((item) =>
+          item.id === id
+            ? { ...item, role, status: result.user.active ? "Active" : "Suspended" }
+            : item
+        )
+      );
+    } catch (updateError) {
+      setError(updateError.message);
+    }
   };
 
   const toggleUserStatus = async (id) => {
     const currentUser = users.find((item) => item.id === id);
     if (!currentUser) return;
     try {
-      const result = await apiRequest(`/admin/users/${id}`, { method: "PATCH", body: JSON.stringify({ active: currentUser.status !== "Active" }) });
-      setUsers((currentUsers) => currentUsers.map((item) => item.id === id ? { ...item, status: result.user.active ? "Active" : "Suspended" } : item));
-    } catch (updateError) { setError(updateError.message); }
+      const result = await apiRequest(`/admin/users/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ active: currentUser.status !== "Active" }),
+      });
+      setUsers((current) =>
+        current.map((item) =>
+          item.id === id
+            ? { ...item, status: result.user.active ? "Active" : "Suspended" }
+            : item
+        )
+      );
+    } catch (updateError) {
+      setError(updateError.message);
+    }
   };
 
-  const addCategory = () => {
-    if (!newCategory.trim()) return;
-
-    setCategories([
-      ...categories,
-      {
-        id: Date.now(),
-        name: newCategory,
-        description:
-          newCategoryDescription || "New support category.",
-        tickets: 0,
-      },
-    ]);
-
-    setNewCategory("");
-    setNewCategoryDescription("");
+  const toggleAutoAssign = async () => {
+    const nextVal = !systemSettings.autoAssignEnabled;
+    try {
+      const res = await apiRequest("/admin/settings", {
+        method: "PATCH",
+        body: JSON.stringify({ autoAssignEnabled: nextVal }),
+      });
+      setSystemSettings(res.settings);
+    } catch (err) {
+      setError(err.message);
+    }
   };
 
-  const deleteCategory = (id) => {
-    setCategories(
-      categories.filter((category) => category.id !== id)
-    );
-  };
+  const filteredUsers = users.filter(
+    (u) =>
+      u.name.toLowerCase().includes(search.toLowerCase()) ||
+      u.email.toLowerCase().includes(search.toLowerCase()) ||
+      u.role.toLowerCase().includes(search.toLowerCase())
+  );
 
-  const getPriorityClass = (priority) => {
-    if (priority === "Critical")
-      return "bg-red-100 text-red-700";
-
-    if (priority === "High")
-      return "bg-orange-100 text-orange-700";
-
-    if (priority === "Medium")
-      return "bg-yellow-100 text-yellow-700";
-
-    return "bg-green-100 text-green-700";
-  };
-
-  const getStatusClass = (status) => {
-    if (status === "Open")
-      return "bg-blue-100 text-blue-700";
-
-    if (status === "In Progress")
-      return "bg-purple-100 text-purple-700";
-
-    if (status === "Waiting for Customer")
-      return "bg-yellow-100 text-yellow-700";
-
-    if (status === "Resolved")
-      return "bg-green-100 text-green-700";
-
-    return "bg-gray-100 text-gray-700";
-  };
+  const filteredTickets = tickets.filter(
+    (t) =>
+      t.id.toLowerCase().includes(search.toLowerCase()) ||
+      t.subject.toLowerCase().includes(search.toLowerCase()) ||
+      t.customerName.toLowerCase().includes(search.toLowerCase()) ||
+      t.category.toLowerCase().includes(search.toLowerCase())
+  );
 
   return (
-    <div className="min-h-screen bg-green-200 flex">
-
+    <div className="flex min-h-screen bg-slate-50 transition-colors dark:bg-slate-950">
       {/* Sidebar */}
-      <aside className="hidden lg:flex w-64 bg-gray-900 text-white flex-col fixed h-screen">
-
-        <div className="p-6 border-b border-gray-700">
-
-          <h1 className="text-2xl font-bold text-green-800">
-            SyncBot
-          </h1>
-
-          <p className="text-sm text-gray-400 mt-1">
-            Administration
+      <aside className="hidden w-64 flex-col border-r border-slate-200 bg-white p-5 lg:flex dark:border-slate-800 dark:bg-slate-900">
+        <div className="border-b border-slate-100 pb-4 dark:border-slate-800">
+          <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-white">
+            Sync<span className="text-emerald-600 dark:text-emerald-400">Bot</span> Admin
+          </h2>
+          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+            System Operations Control
           </p>
-
         </div>
 
-        <nav className="p-4 space-y-2">
-
-          <button
-            onClick={() => setActiveSection("dashboard")}
-            className={`w-full text-left px-4 py-3 rounded-lg ${
-              activeSection === "dashboard"
-                ? "bg-green-800"
-                : "hover:bg-gray-800"
-            }`}
-          >
-            📊 Dashboard
-          </button>
-
-          <button
-            onClick={() => setActiveSection("users")}
-            className={`w-full text-left px-4 py-3 rounded-lg ${
-              activeSection === "users"
-                ? "bg-green-800"
-                : "hover:bg-gray-800"
-            }`}
-          >
-            👥 User Management
-          </button>
-
-          <button
-            onClick={() => setActiveSection("tickets")}
-            className={`w-full text-left px-4 py-3 rounded-lg ${
-              activeSection === "tickets"
-                ? "bg-green-800"
-                : "hover:bg-gray-800"
-            }`}
-          >
-            🎫 Ticket Overview
-          </button>
-
-          <button
-            onClick={() => setActiveSection("categories")}
-            className={`w-full text-left px-4 py-3 rounded-lg ${
-              activeSection === "categories"
-                ? "bg-green-800"
-                : "hover:bg-gray-800"
-            }`}
-          >
-            🗂️ Categories
-          </button>
-
-        </nav>
-
-        <div className="mt-auto p-4 border-t border-gray-700">
-
-          <div className="flex items-center gap-3">
-
-            <div className="w-10 h-10 rounded-full bg-green-800 flex items-center justify-center font-bold">
-              {user?.name?.slice(0, 2).toUpperCase() || "AD"}
-            </div>
-
-            <div>
-              <p className="font-semibold">
-                {user?.name || "Administrator"}
-              </p>
-
-              <p className="text-xs text-gray-400">
-                Administrator
-              </p>
-            </div>
-
-          </div>
-
-        </div>
-
-      </aside>
-
-      {/* Main Content */}
-      <main className="flex-1 lg:ml-64">
-
-        {/* Header */}
-        <header className="bg-white border-b px-6 py-4 flex justify-between items-center sticky top-0 z-10">
-
-          <div>
-
-            <h2 className="text-xl font-bold text-gray-800">
-              {activeSection === "dashboard"
-                ? "Admin Dashboard"
-                : activeSection === "users"
-                ? "User Management"
-                : activeSection === "tickets"
-                ? "Ticket Overview"
-                : "Category Management"}
-            </h2>
-
-            <p className="text-sm text-gray-500">
-              Manage and monitor your support platform
-            </p>
-
-          </div>
-
-          <div className="w-10 h-10 rounded-full bg-green-100 text-green-800 flex items-center justify-center font-bold">
-            {user?.name?.slice(0, 2).toUpperCase() || "AD"}
-          </div>
-
-        </header>
-
-        <nav className="flex gap-2 overflow-x-auto border-b bg-white px-4 py-3 lg:hidden" aria-label="Admin sections">
-          {["dashboard", "users", "tickets", "categories"].map((section) => (
+        <nav className="mt-6 flex-1 space-y-1.5 text-xs font-semibold">
+          {[
+            ["analytics", "Analytics Dashboard", BarChart3],
+            ["dashboard", "Overview & KPIs", Activity],
+            ["users", "User Management", Users],
+            ["tickets", "Ticket Oversight", Ticket],
+            ["settings", "System Settings", Settings],
+          ].map(([id, label, Icon]) => (
             <button
-              key={section}
-              type="button"
-              onClick={() => setActiveSection(section)}
-              className={`shrink-0 rounded-lg px-3 py-2 text-sm font-semibold capitalize ${activeSection === section ? "bg-green-800 text-white" : "bg-gray-100 text-gray-700"}`}
+              key={id}
+              onClick={() => setActiveSection(id)}
+              className={`flex w-full items-center gap-2.5 rounded-xl px-3.5 py-2.5 transition ${
+                activeSection === id
+                  ? "bg-emerald-600 text-white shadow-xs"
+                  : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+              }`}
             >
-              {section}
+              <Icon className="h-4 w-4" />
+              <span>{label}</span>
             </button>
           ))}
         </nav>
 
-        {error && <div className="mx-4 mt-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 sm:mx-6">{error}</div>}
-        {loading && <div className="p-8 text-center text-sm text-gray-500">Loading live admin data...</div>}
-
-        <div className="p-4 sm:p-6">
-
-          {/* ================= DASHBOARD ================= */}
-          {activeSection === "dashboard" && (
-            <div>
-
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-
-                <div className="bg-white rounded-xl border p-5 shadow-sm">
-                  <p className="text-sm text-gray-500">
-                    Total Users
-                  </p>
-
-                  <h3 className="text-3xl font-bold mt-2">
-                    {totalUsers}
-                  </h3>
-
-                  <p className="text-xs text-gray-400 mt-2">
-                    Registered platform users
-                  </p>
-                </div>
-
-                <div className="bg-white rounded-xl border p-5 shadow-sm">
-                  <p className="text-sm text-gray-500">
-                    Customers
-                  </p>
-
-                  <h3 className="text-3xl font-bold mt-2 text-blue-900">
-                    {customerCount}
-                  </h3>
-
-                  <p className="text-xs text-gray-400 mt-2">
-                    Customer accounts
-                  </p>
-                </div>
-
-                <div className="bg-white rounded-xl border p-5 shadow-sm">
-                  <p className="text-sm text-gray-500">
-                    Support Agents
-                  </p>
-
-                  <h3 className="text-3xl font-bold mt-2 text-green-800">
-                    {agentCount}
-                  </h3>
-
-                  <p className="text-xs text-gray-400 mt-2">
-                    Active support staff
-                  </p>
-                </div>
-
-                <div className="bg-white rounded-xl border p-5 shadow-sm">
-                  <p className="text-sm text-gray-500">
-                    Active Tickets
-                  </p>
-
-                  <h3 className="text-3xl font-bold mt-2 text-orange-600">
-                    {activeTickets}
-                  </h3>
-
-                  <p className="text-xs text-gray-400 mt-2">
-                    Requiring attention
-                  </p>
-                </div>
-
-              </div>
-
-              {/* Overview */}
-              <div className="grid lg:grid-cols-2 gap-6">
-
-                <div className="bg-white rounded-xl border">
-
-                  <div className="p-5 border-b">
-                    <h3 className="font-bold text-lg">
-                      Ticket Overview
-                    </h3>
-                  </div>
-
-                  <div className="p-5 space-y-5">
-
-                    <div>
-                      <div className="flex justify-between mb-2">
-                        <span className="text-sm">
-                          Active Tickets
-                        </span>
-
-                        <span className="font-semibold">
-                          {activeTickets}
-                        </span>
-                      </div>
-
-                      <div className="w-full bg-gray-100 rounded-full h-2">
-                        <div
-                          className="bg-purple-600 h-2 rounded-full"
-                          style={{
-                            width: `${Math.min(
-                              activeTickets * 15,
-                              100
-                            )}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="flex justify-between mb-2">
-                        <span className="text-sm">
-                          Resolved Tickets
-                        </span>
-
-                        <span className="font-semibold">
-                          {resolvedTickets}
-                        </span>
-                      </div>
-
-                      <div className="w-full bg-gray-100 rounded-full h-2">
-                        <div
-                          className="bg-green-800 h-2 rounded-full"
-                          style={{
-                            width: `${Math.min(
-                              resolvedTickets * 20,
-                              100
-                            )}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-
-                  </div>
-
-                </div>
-
-                <div className="bg-white rounded-xl border">
-
-                  <div className="p-5 border-b">
-                    <h3 className="font-bold text-lg">
-                      System Summary
-                    </h3>
-                  </div>
-
-                  <div className="p-5 space-y-4">
-
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">
-                        Categories
-                      </span>
-
-                      <span className="font-bold">
-                        {categories.length}
-                      </span>
-                    </div>
-
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">
-                        Support Agents
-                      </span>
-
-                      <span className="font-bold">
-                        {agentCount}
-                      </span>
-                    </div>
-
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">
-                        Customers
-                      </span>
-
-                      <span className="font-bold">
-                        {customerCount}
-                      </span>
-                    </div>
-
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">
-                        Total Tickets
-                      </span>
-
-                      <span className="font-bold">
-                        {tickets.length}
-                      </span>
-                    </div>
-
-                  </div>
-
-                </div>
-
-              </div>
-
-              {/* Recent Tickets */}
-              <div className="bg-white rounded-xl border mt-6">
-
-                <div className="p-5 border-b flex justify-between">
-                  <h3 className="font-bold text-lg">
-                    Recent Tickets
-                  </h3>
-
-                  <button
-                    onClick={() => setActiveSection("tickets")}
-                    className="text-green-800 text-sm font-semibold"
-                  >
-                    View All
-                  </button>
-                </div>
-
-                <div className="divide-y">
-
-                  {tickets.slice(0, 4).map((ticket) => (
-                    <div
-                      key={ticket.id}
-                      className="p-5 flex flex-col md:flex-row justify-between gap-3"
-                    >
-
-                      <div>
-
-                        <p className="text-green-800 text-sm font-semibold">
-                          {ticket.id}
-                        </p>
-
-                        <h4 className="font-semibold">
-                          {ticket.subject}
-                        </h4>
-
-                        <p className="text-sm text-gray-500">
-                          {ticket.customer} •{" "}
-                          {ticket.category}
-                        </p>
-
-                      </div>
-
-                      <div className="flex gap-2 items-center">
-
-                        <span
-                          className={`px-3 py-1 rounded-full text-xs font-semibold ${getPriorityClass(
-                            ticket.priority
-                          )}`}
-                        >
-                          {ticket.priority}
-                        </span>
-
-                        <span
-                          className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusClass(
-                            ticket.status
-                          )}`}
-                        >
-                          {ticket.status}
-                        </span>
-
-                      </div>
-
-                    </div>
-                  ))}
-
-                </div>
-
-              </div>
-
+        <div className="border-t border-slate-100 pt-4 dark:border-slate-800">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-700 text-xs font-bold text-white">
+              {user?.name?.slice(0, 2).toUpperCase() || "AD"}
             </div>
-          )}
-
-          {/* ================= USERS ================= */}
-          {activeSection === "users" && (
-            <div>
-
-              <div className="bg-white rounded-xl border p-4 mb-6">
-
-                <input
-                  type="text"
-                  placeholder="Search users by name, email or role..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-full border rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-purple-500"
-                />
-
-              </div>
-
-              <div className="bg-white rounded-xl border overflow-hidden">
-
-                <div className="overflow-x-auto">
-
-                  <div className="overflow-x-auto">
-                  <table className="w-full min-w-160">
-
-                    <thead className="bg-gray-50 border-b">
-
-                      <tr>
-                        <th className="text-left px-5 py-4">
-                          User
-                        </th>
-
-                        <th className="text-left px-5 py-4">
-                          Role
-                        </th>
-
-                        <th className="text-left px-5 py-4">
-                          Status
-                        </th>
-
-                        <th className="text-left px-5 py-4">
-                          Joined
-                        </th>
-
-                        <th className="text-left px-5 py-4">
-                          Actions
-                        </th>
-                      </tr>
-
-                    </thead>
-
-                    <tbody className="divide-y">
-
-                      {filteredUsers.map((user) => (
-                        <tr
-                          key={user.id}
-                          className="hover:bg-gray-50"
-                        >
-
-                          <td className="px-5 py-4">
-
-                            <p className="font-semibold">
-                              {user.name}
-                            </p>
-
-                            <p className="text-sm text-gray-500">
-                              {user.email}
-                            </p>
-
-                          </td>
-
-                          <td className="px-5 py-4">
-
-                            <select
-                              value={user.role}
-                              onChange={(e) =>
-                                changeUserRole(
-                                  user.id,
-                                  e.target.value
-                                )
-                              }
-                              className="border rounded-lg px-3 py-2 text-sm"
-                              disabled={
-                                user.role ===
-                                "Administrator"
-                              }
-                            >
-                              <option>Customer</option>
-                              <option>Agent</option>
-                              <option>
-                                Administrator
-                              </option>
-                            </select>
-
-                          </td>
-
-                          <td className="px-5 py-4">
-
-                            <span
-                              className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                                user.status === "Active"
-                                  ? "bg-green-100 text-green-700"
-                                  : "bg-red-100 text-red-700"
-                              }`}
-                            >
-                              {user.status}
-                            </span>
-
-                          </td>
-
-                          <td className="px-5 py-4 text-sm text-gray-500">
-                            {user.joined}
-                          </td>
-
-                          <td className="px-5 py-4">
-
-                            {user.role !==
-                              "Administrator" && (
-                              <button
-                                onClick={() =>
-                                  toggleUserStatus(user.id)
-                                }
-                                className={`px-3 py-2 rounded-lg text-sm font-semibold ${
-                                  user.status === "Active"
-                                    ? "bg-red-50 text-red-600"
-                                    : "bg-green-50 text-green-600"
-                                }`}
-                              >
-                                {user.status === "Active"
-                                  ? "Suspend"
-                                  : "Activate"}
-                              </button>
-                            )}
-
-                          </td>
-
-                        </tr>
-                      ))}
-
-                    </tbody>
-
-                  </table>
-                  </div>
-
-                </div>
-
-              </div>
-
+            <div className="truncate">
+              <p className="truncate text-xs font-bold text-slate-900 dark:text-white">
+                {user?.name || "Administrator"}
+              </p>
+              <p className="truncate text-[10px] text-slate-400">{user?.email}</p>
             </div>
-          )}
-
-          {/* ================= TICKETS ================= */}
-          {activeSection === "tickets" && (
-            <div>
-
-              <div className="bg-white rounded-xl border p-4 mb-6">
-
-                <input
-                  type="text"
-                  placeholder="Search tickets..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-full border rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-purple-500"
-                />
-
-              </div>
-
-              <div className="bg-white rounded-xl border overflow-hidden">
-
-                <div className="overflow-x-auto">
-
-                  <div className="overflow-x-auto">
-                  <table className="w-full min-w-160">
-
-                    <thead className="bg-gray-50 border-b">
-
-                      <tr>
-                        <th className="text-left px-5 py-4">
-                          Ticket
-                        </th>
-
-                        <th className="text-left px-5 py-4">
-                          Customer
-                        </th>
-
-                        <th className="text-left px-5 py-4">
-                          Category
-                        </th>
-
-                        <th className="text-left px-5 py-4">
-                          Priority
-                        </th>
-
-                        <th className="text-left px-5 py-4">
-                          Status
-                        </th>
-
-                        <th className="text-left px-5 py-4">
-                          Assigned Agent
-                        </th>
-                      </tr>
-
-                    </thead>
-
-                    <tbody className="divide-y">
-
-                      {filteredTickets.map((ticket) => (
-                        <tr
-                          key={ticket.id}
-                          className="hover:bg-gray-50"
-                        >
-
-                          <td className="px-5 py-4">
-
-                            <p className="font-semibold text-green-800">
-                              {ticket.id}
-                            </p>
-
-                            <p className="text-sm">
-                              {ticket.subject}
-                            </p>
-
-                          </td>
-
-                          <td className="px-5 py-4">
-                            {ticket.customer}
-                          </td>
-
-                          <td className="px-5 py-4 text-sm">
-                            {ticket.category}
-                          </td>
-
-                          <td className="px-5 py-4">
-
-                            <span
-                              className={`px-3 py-1 rounded-full text-xs font-semibold ${getPriorityClass(
-                                ticket.priority
-                              )}`}
-                            >
-                              {ticket.priority}
-                            </span>
-
-                          </td>
-
-                          <td className="px-5 py-4">
-
-                            <span
-                              className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusClass(
-                                ticket.status
-                              )}`}
-                            >
-                              {ticket.status}
-                            </span>
-
-                          </td>
-
-                          <td className="px-5 py-4 text-sm">
-                            {ticket.agent}
-                          </td>
-
-                        </tr>
-                      ))}
-
-                    </tbody>
-
-                  </table>
-                  </div>
-
-                </div>
-
-              </div>
-
-            </div>
-          )}
-
-          {/* ================= CATEGORIES ================= */}
-          {activeSection === "categories" && (
-            <div>
-
-              <div className="grid lg:grid-cols-3 gap-6">
-
-                {/* Add Category */}
-                <div className="bg-white rounded-xl border p-5 h-fit">
-
-                  <h3 className="font-bold text-lg">
-                    Add Category
-                  </h3>
-
-                  <p className="text-sm text-gray-500 mt-1 mb-5">
-                    Create a new support ticket category.
-                  </p>
-
-                  <div className="space-y-4">
-
-                    <input
-                      type="text"
-                      placeholder="Category name"
-                      value={newCategory}
-                      onChange={(e) =>
-                        setNewCategory(e.target.value)
-                      }
-                      className="w-full border rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-purple-500"
-                    />
-
-                    <textarea
-                      placeholder="Category description"
-                      rows="4"
-                      value={newCategoryDescription}
-                      onChange={(e) =>
-                        setNewCategoryDescription(
-                          e.target.value
-                        )
-                      }
-                      className="w-full border rounded-lg px-4 py-3 outline-none focus:ring-2 focus:ring-purple-500"
-                    />
-
-                    <button
-                      onClick={addCategory}
-                      className="w-full bg-green-800 text-white py-3 rounded-lg font-semibold hover:bg-green-700"
-                    >
-                      + Add Category
-                    </button>
-
-                  </div>
-
-                </div>
-
-                {/* Category List */}
-                <div className="lg:col-span-2">
-
-                  <div className="bg-white rounded-xl border overflow-hidden">
-
-                    <div className="p-5 border-b">
-
-                      <h3 className="font-bold text-lg">
-                        Existing Categories
-                      </h3>
-
-                    </div>
-
-                    <div className="divide-y">
-
-                      {categories.map((category) => (
-                        <div
-                          key={category.id}
-                          className="p-5 flex flex-col sm:flex-row justify-between gap-4"
-                        >
-
-                          <div>
-
-                            <h4 className="font-semibold">
-                              {category.name}
-                            </h4>
-
-                            <p className="text-sm text-gray-500 mt-1">
-                              {category.description}
-                            </p>
-
-                            <p className="text-xs text-green-800 mt-2">
-                              {category.tickets} tickets
-                            </p>
-
-                          </div>
-
-                          <button
-                            onClick={() =>
-                              deleteCategory(category.id)
-                            }
-                            className="text-red-600 bg-red-50 px-4 py-2 rounded-lg text-sm font-semibold h-fit"
-                          >
-                            Delete
-                          </button>
-
-                        </div>
-                      ))}
-
-                    </div>
-
-                  </div>
-
-                </div>
-
-              </div>
-
-            </div>
-          )}
-
+          </div>
         </div>
+      </aside>
+
+      {/* Main Content Area */}
+      <main className="flex-1 overflow-x-hidden p-6 sm:p-8">
+        {/* Mobile Navigation */}
+        <div className="mb-6 flex flex-wrap gap-1.5 lg:hidden">
+          {[
+            ["analytics", "Analytics", BarChart3],
+            ["dashboard", "Overview", Activity],
+            ["users", "Users", Users],
+            ["tickets", "Tickets", Ticket],
+            ["settings", "Settings", Settings],
+          ].map(([id, label, Icon]) => (
+            <button
+              key={id}
+              onClick={() => setActiveSection(id)}
+              className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold ${
+                activeSection === id
+                  ? "bg-emerald-600 text-white"
+                  : "bg-white text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+              }`}
+            >
+              <Icon className="h-3 w-3" />
+              <span>{label}</span>
+            </button>
+          ))}
+        </div>
+
+        {error && (
+          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-xs font-medium text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+            {error}
+          </div>
+        )}
+
+        {/* 1. ANALYTICS DASHBOARD */}
+        {activeSection === "analytics" && analytics && (
+          <section className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-extrabold text-slate-900 dark:text-white">
+                Analytics &amp; Performance Metrics
+              </h2>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                Service Level Agreements (SLA), Customer Satisfaction (CSAT), and operational throughput.
+              </p>
+            </div>
+
+            {/* KPI Cards */}
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+              <div className="rounded-2xl border border-slate-200 bg-white p-4.5 shadow-2xs dark:border-slate-800 dark:bg-slate-900">
+                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Total Volume</p>
+                <p className="mt-1 text-2xl font-extrabold text-slate-900 dark:text-white">{analytics.total}</p>
+                <span className="text-[10px] text-emerald-600 font-medium">All recorded</span>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-4.5 shadow-2xs dark:border-slate-800 dark:bg-slate-900">
+                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Response SLA</p>
+                <p className="mt-1 text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">
+                  {analytics.responseSlaCompliance}%
+                </p>
+                <span className="text-[10px] text-slate-400">Met deadline</span>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-4.5 shadow-2xs dark:border-slate-800 dark:bg-slate-900">
+                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Resolution SLA</p>
+                <p className="mt-1 text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">
+                  {analytics.resolutionSlaCompliance}%
+                </p>
+                <span className="text-[10px] text-slate-400">Within target</span>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-4.5 shadow-2xs dark:border-slate-800 dark:bg-slate-900">
+                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Avg 1st Response</p>
+                <p className="mt-1 text-2xl font-extrabold text-slate-900 dark:text-white">
+                  {analytics.avgFirstResponseHours}h
+                </p>
+                <span className="text-[10px] text-slate-400">Speed to reply</span>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-4.5 shadow-2xs dark:border-slate-800 dark:bg-slate-900">
+                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Avg Resolution</p>
+                <p className="mt-1 text-2xl font-extrabold text-slate-900 dark:text-white">
+                  {analytics.avgResolutionHours}h
+                </p>
+                <span className="text-[10px] text-slate-400">Time to close</span>
+              </div>
+
+              <div className="rounded-2xl border border-slate-200 bg-white p-4.5 shadow-2xs dark:border-slate-800 dark:bg-slate-900">
+                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">CSAT Score</p>
+                <div className="mt-1 flex items-baseline gap-1">
+                  <p className="text-2xl font-extrabold text-amber-500">{analytics.csatAverage}</p>
+                  <span className="text-xs text-slate-400">/ 5.0</span>
+                </div>
+                <span className="text-[10px] text-slate-400">{analytics.csatTotalReviews} reviews</span>
+              </div>
+            </div>
+
+            {/* Visual Charts: Category and Priority Breakdown */}
+            <div className="grid gap-6 lg:grid-cols-2">
+              {/* Category Breakdown */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-2xs dark:border-slate-800 dark:bg-slate-900">
+                <h3 className="font-bold text-slate-900 dark:text-white text-sm">
+                  Tickets by Category Breakdown
+                </h3>
+                <div className="mt-5 space-y-3.5">
+                  {Object.entries(analytics.categoryCounts || {}).map(([cat, cnt]) => {
+                    const pct = analytics.total ? Math.round((cnt / analytics.total) * 100) : 0;
+                    return (
+                      <div key={cat}>
+                        <div className="flex justify-between text-xs font-semibold text-slate-700 dark:text-slate-300">
+                          <span>{cat}</span>
+                          <span>{cnt} ({pct}%)</span>
+                        </div>
+                        <div className="mt-1.5 h-2.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                          <div
+                            className="h-full rounded-full bg-emerald-600 transition-all duration-500"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Priority & CSAT Breakdown */}
+              <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-2xs dark:border-slate-800 dark:bg-slate-900">
+                <h3 className="font-bold text-slate-900 dark:text-white text-sm">
+                  Customer Satisfaction (CSAT) Distribution
+                </h3>
+                <div className="mt-5 space-y-2.5">
+                  {[5, 4, 3, 2, 1].map((stars) => {
+                    const count = analytics.csatDistribution?.[stars] || 0;
+                    const pct = analytics.csatTotalReviews
+                      ? Math.round((count / analytics.csatTotalReviews) * 100)
+                      : 0;
+
+                    return (
+                      <div key={stars} className="flex items-center gap-3 text-xs">
+                        <span className="w-12 font-bold text-amber-500">{stars} Stars</span>
+                        <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                          <div
+                            className="h-full rounded-full bg-amber-400 transition-all duration-500"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <span className="w-10 text-right font-medium text-slate-500 dark:text-slate-400">
+                          {count}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Agent Performance Leaderboard */}
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xs dark:border-slate-800 dark:bg-slate-900">
+              <div className="border-b border-slate-100 px-6 py-4 dark:border-slate-800">
+                <h3 className="font-bold text-slate-900 dark:text-white text-sm">
+                  Agent Support Leaderboard
+                </h3>
+                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                  Performance across resolution volume, speed, and customer ratings.
+                </p>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 font-bold uppercase tracking-wider text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
+                    <tr>
+                      <th className="px-6 py-3.5">Agent Name</th>
+                      <th className="px-6 py-3.5">Assigned Tickets</th>
+                      <th className="px-6 py-3.5">Resolved Count</th>
+                      <th className="px-6 py-3.5">Avg CSAT Rating</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {analytics.agentLeaderboard?.map((ag) => (
+                      <tr key={ag.agentId} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                        <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">
+                          {ag.name}
+                          <span className="block text-[11px] font-normal text-slate-400">
+                            {ag.email}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 font-semibold text-slate-700 dark:text-slate-300">
+                          {ag.totalAssigned}
+                        </td>
+                        <td className="px-6 py-4 font-semibold text-emerald-600 dark:text-emerald-400">
+                          {ag.resolvedCount}
+                        </td>
+                        <td className="px-6 py-4 font-bold text-amber-500">
+                          {ag.avgCsat !== "N/A" ? `★ ${ag.avgCsat} / 5.0` : "No ratings yet"}
+                        </td>
+                      </tr>
+                    ))}
+                    {!analytics.agentLeaderboard?.length && (
+                      <tr>
+                        <td colSpan="4" className="px-6 py-8 text-center text-slate-400">
+                          No active agents registered in system.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* 2. MAIN OVERVIEW / DASHBOARD */}
+        {activeSection === "dashboard" && (
+          <section className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-extrabold text-slate-900 dark:text-white">
+                Workspace Overview
+              </h2>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                High-level operational overview across all queues.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs dark:border-slate-800 dark:bg-slate-900">
+                <p className="text-xs text-slate-500 dark:text-slate-400">Total Users</p>
+                <p className="mt-2 text-3xl font-extrabold text-slate-900 dark:text-white">{users.length}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs dark:border-slate-800 dark:bg-slate-900">
+                <p className="text-xs text-slate-500 dark:text-slate-400">Active Agents</p>
+                <p className="mt-2 text-3xl font-extrabold text-slate-900 dark:text-white">
+                  {users.filter((u) => u.role === "Agent" && u.status === "Active").length}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs dark:border-slate-800 dark:bg-slate-900">
+                <p className="text-xs text-slate-500 dark:text-slate-400">Open Tickets</p>
+                <p className="mt-2 text-3xl font-extrabold text-blue-600 dark:text-blue-400">
+                  {tickets.filter((t) => t.status === "Open").length}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-2xs dark:border-slate-800 dark:bg-slate-900">
+                <p className="text-xs text-slate-500 dark:text-slate-400">Resolved</p>
+                <p className="mt-2 text-3xl font-extrabold text-emerald-600 dark:text-emerald-400">
+                  {tickets.filter((t) => ["Resolved", "Closed"].includes(t.status)).length}
+                </p>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* 3. USER MANAGEMENT */}
+        {activeSection === "users" && (
+          <section className="space-y-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-2xl font-extrabold text-slate-900 dark:text-white">
+                  User Management
+                </h2>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Assign user roles and manage access privileges.
+                </p>
+              </div>
+
+              <div className="relative w-full sm:w-64">
+                <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Filter users..."
+                  className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-xs text-slate-900 focus:border-emerald-600 focus:outline-none dark:border-slate-800 dark:bg-slate-900 dark:text-white"
+                />
+              </div>
+            </div>
+
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xs dark:border-slate-800 dark:bg-slate-900">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 font-bold uppercase tracking-wider text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
+                    <tr>
+                      <th className="px-6 py-3.5">User</th>
+                      <th className="px-6 py-3.5">Role</th>
+                      <th className="px-6 py-3.5">Status</th>
+                      <th className="px-6 py-3.5">Joined</th>
+                      <th className="px-6 py-3.5 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {filteredUsers.map((u) => (
+                      <tr key={u.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                        <td className="px-6 py-4 font-semibold text-slate-900 dark:text-white">
+                          {u.name}
+                          <span className="block text-[11px] font-normal text-slate-400">{u.email}</span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <select
+                            value={u.role}
+                            onChange={(e) => changeUserRole(u.id, e.target.value)}
+                            className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                          >
+                            <option value="Customer">Customer</option>
+                            <option value="Agent">Agent</option>
+                            <option value="Admin">Admin</option>
+                          </select>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span
+                            className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                              u.status === "Active"
+                                ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"
+                                : "bg-red-50 text-red-700 dark:bg-red-950/40 dark:text-red-400"
+                            }`}
+                          >
+                            {u.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-slate-500">{u.joined}</td>
+                        <td className="px-6 py-4 text-right">
+                          <button
+                            onClick={() => toggleUserStatus(u.id)}
+                            className="text-xs font-semibold text-slate-600 hover:text-emerald-600 dark:text-slate-400 dark:hover:text-emerald-400"
+                          >
+                            {u.status === "Active" ? "Suspend" : "Activate"}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* 4. TICKET OVERSIGHT */}
+        {activeSection === "tickets" && (
+          <section className="space-y-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-2xl font-extrabold text-slate-900 dark:text-white">
+                  Ticket Oversight
+                </h2>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  Global view of all submitted customer support tickets.
+                </p>
+              </div>
+
+              <div className="relative w-full sm:w-64">
+                <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Filter tickets..."
+                  className="w-full rounded-xl border border-slate-200 bg-white py-2 pl-9 pr-3 text-xs text-slate-900 focus:border-emerald-600 focus:outline-none dark:border-slate-800 dark:bg-slate-900 dark:text-white"
+                />
+              </div>
+            </div>
+
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xs dark:border-slate-800 dark:bg-slate-900">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 font-bold uppercase tracking-wider text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
+                    <tr>
+                      <th className="px-6 py-3.5">Ticket</th>
+                      <th className="px-6 py-3.5">Customer</th>
+                      <th className="px-6 py-3.5">Assigned Agent</th>
+                      <th className="px-6 py-3.5">SLA Tracking</th>
+                      <th className="px-6 py-3.5">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {filteredTickets.map((t) => (
+                      <tr key={t.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                        <td className="px-6 py-4 font-semibold text-slate-900 dark:text-white">
+                          <span className="font-mono text-emerald-600 dark:text-emerald-400 block text-[11px]">
+                            {t.id}
+                          </span>
+                          {t.subject}
+                        </td>
+                        <td className="px-6 py-4 text-slate-600 dark:text-slate-300">
+                          {t.customerName}
+                        </td>
+                        <td className="px-6 py-4 font-medium text-slate-700 dark:text-slate-300">
+                          {t.agentName}
+                        </td>
+                        <td className="px-6 py-4">
+                          <SlaBadge sla={t.sla} status={t.status} />
+                        </td>
+                        <td className="px-6 py-4">
+                          <span
+                            className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${
+                              t.status === "Resolved"
+                                ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"
+                                : t.status === "In Progress"
+                                ? "bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
+                                : "bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400"
+                            }`}
+                          >
+                            {t.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        )}
+
+        
+        {/* 6. SYSTEM SETTINGS */}
+        {activeSection === "settings" && (
+          <section className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-extrabold text-slate-900 dark:text-white">
+                System Settings
+              </h2>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                Configure automated workflows, routing policies, and notification triggers.
+              </p>
+            </div>
+
+            <div className="max-w-2xl rounded-2xl border border-slate-200 bg-white p-6 shadow-2xs dark:border-slate-800 dark:bg-slate-900">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-bold text-slate-900 dark:text-white text-sm">
+                    Automatic Ticket Routing
+                  </h4>
+                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Automatically assign incoming customer tickets to the least-loaded active agent.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={toggleAutoAssign}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    systemSettings.autoAssignEnabled ? "bg-emerald-600" : "bg-slate-300 dark:bg-slate-700"
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                      systemSettings.autoAssignEnabled ? "translate-x-5" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+              </div>
+
+              <div className="mt-6 border-t border-slate-100 pt-5 dark:border-slate-800">
+                <h4 className="font-bold text-slate-900 dark:text-white text-sm">
+                  Active SLA Configuration
+                </h4>
+                <ul className="mt-3 space-y-2 text-xs text-slate-600 dark:text-slate-300">
+                  <li className="flex justify-between">
+                    <span>Critical Priority:</span>
+                    <span className="font-semibold text-emerald-600 dark:text-emerald-400">2h Response / 6h Resolution</span>
+                  </li>
+                  <li className="flex justify-between">
+                    <span>High Priority:</span>
+                    <span className="font-semibold text-emerald-600 dark:text-emerald-400">4h Response / 12h Resolution</span>
+                  </li>
+                  <li className="flex justify-between">
+                    <span>Medium Priority:</span>
+                    <span className="font-semibold text-emerald-600 dark:text-emerald-400">8h Response / 24h Resolution</span>
+                  </li>
+                  <li className="flex justify-between">
+                    <span>Low Priority:</span>
+                    <span className="font-semibold text-emerald-600 dark:text-emerald-400">24h Response / 48h Resolution</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </section>
+        )}
       </main>
     </div>
   );
