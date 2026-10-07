@@ -459,8 +459,8 @@ app.post("/api/ai/suggest-title", auth, async (req, res) => {
     const result = await suggestTicketTitle(description, category);
     res.json(result);
   } catch (error) {
-    console.error("Groq title request failed:", error.message);
-    sendError(res, 502, `Groq title request failed: ${error.message}`);
+    console.error("OpenRouter title request failed:", error.message);
+    sendError(res, 502, `OpenRouter title request failed: ${error.message}`);
   }
 });
 
@@ -474,8 +474,8 @@ app.post("/api/ai/rag-search", auth, async (req, res) => {
     const result = await generateRAGAnswer(query, articles);
     res.json(result);
   } catch (error) {
-    console.error("Groq RAG request failed:", error.message);
-    sendError(res, 502, `Groq RAG request failed: ${error.message}`);
+    console.error("Knowledge base RAG request failed:", error.message);
+    sendError(res, 502, `Knowledge base RAG request failed: ${error.message}`);
   }
 });
 
@@ -1144,7 +1144,7 @@ app.post("/api/tickets/:id/ai-analysis", auth, roles("agent", "admin"), async (r
     recommendedAction: `Review the ${category.toLowerCase()} details and confirm the resolution with the customer.`,
   };
 
-  if (!process.env.GROQ_API_KEY) return res.json({ analysis: fallback, mode: "local-fallback" });
+  if (!process.env.OPENROUTER_API_KEY) return res.json({ analysis: fallback, mode: "local-fallback" });
 
   try {
     const conversation = (ticket.messages || [])
@@ -1153,7 +1153,7 @@ app.post("/api/tickets/:id/ai-analysis", auth, roles("agent", "admin"), async (r
       .map((message) => `${message.author?.name || "User"}: ${message.body}`)
       .join("\n");
 
-    const content = await generateGroqText({
+    const content = await generateOpenRouterText({
       systemPrompt:
         "You are an AI support operations assistant. Analyze the supplied ticket only. Return valid JSON with exactly these string keys: summary, category, priority, sentiment, suggestedResponse, recommendedAction. Category must be one of Technical Issue, Billing, Account, Product, General Inquiry. Priority must be one of Low, Medium, High, Critical.",
       userPrompt: JSON.stringify({
@@ -1168,10 +1168,10 @@ app.post("/api/tickets/:id/ai-analysis", auth, roles("agent", "admin"), async (r
       responseMimeType: "application/json",
     });
     const analysis = { ...fallback, ...JSON.parse(content) };
-    return res.json({ analysis, mode: "groq" });
+    return res.json({ analysis, mode: "openrouter" });
   } catch (error) {
     console.error("AI ticket analysis failed:", error.message);
-    return sendError(res, 502, `Groq ticket analysis failed: ${error.message}`);
+    return sendError(res, 502, `OpenRouter ticket analysis failed: ${error.message}`);
   }
 });
 

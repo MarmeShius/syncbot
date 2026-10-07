@@ -46,7 +46,7 @@ The public registration page creates customer accounts only. Agent and admin acc
 - Mongoose for MongoDB models
 - JWT for login sessions
 - bcrypt for password hashing
-- Groq API for optional AI responses
+- OpenRouter API for optional AI responses
 
 ## Project folders
 
@@ -83,8 +83,8 @@ PORT=5000
 CLIENT_URL=http://localhost:5173
 JWT_SECRET=put-a-long-random-secret-here
 MONGO_URI=mongodb+srv://DATABASE_USER:DATABASE_PASSWORD@YOUR_CLUSTER.mongodb.net/syncbot?retryWrites=true&w=majority
-GROQ_API_KEY=
-GROQ_MODEL=openai/gpt-oss-20b
+OPENROUTER_API_KEY=
+OPENROUTER_MODEL=openai/gpt-oss-20b
 SMTP_HOST=
 SMTP_PORT=587
 SMTP_USER=
@@ -169,7 +169,7 @@ The important AI feature is inside the Agent Dashboard.
 1. A customer creates a real ticket.
 2. The agent opens that ticket.
 3. The agent clicks **Analyze with AI**.
-4. The backend sends the ticket subject, description, category, priority, status, and recent conversation to Groq.
+4. The backend sends the ticket subject, description, category, priority, status, and recent conversation to OpenRouter.
 5. The agent gets:
    - A short summary
    - Suggested category
@@ -178,9 +178,9 @@ The important AI feature is inside the Agent Dashboard.
    - Suggested response
    - Recommended next action
 
-The Groq key is only used by the backend. It is never placed in React.
+The OpenRouter key is only used by the backend. It is never placed in React.
 
-If `GROQ_API_KEY` is empty, the app uses a local fallback. This lets the evaluator run the project without paying for an API call. When a Groq key is available, AI responses come from Groq.
+If `OPENROUTER_API_KEY` is empty, the app uses a local fallback. When an OpenRouter key is available, AI responses come from OpenRouter.
 
 There is also a small customer support chatbot for general questions. It is different from the Agent ticket analysis feature.
 
@@ -326,8 +326,8 @@ PORT=5000
 CLIENT_URL=https://YOUR-FRONTEND-DOMAIN.vercel.app
 JWT_SECRET=your-production-random-secret
 MONGO_URI=your-mongodb-atlas-uri
-GROQ_API_KEY=your-groq-api-key
-GROQ_MODEL=openai/gpt-oss-20b
+OPENROUTER_API_KEY=your-openrouter-api-key
+OPENROUTER_MODEL=openai/gpt-oss-20b
 ```
 
 Do not put `STAFF_PASSWORD` in GitHub. Create the staff account privately before or after deployment using the backend command, or create it directly in the database with the password hashed by the application.
@@ -374,7 +374,7 @@ The project was checked with frontend build and lint commands, backend syntax ch
 
 ## Run with Docker
 
-Install Docker Desktop, then copy `.env.example` to `.env` in the project root. Set `JWT_SECRET` to a long random value. The Groq key is optional.
+Install Docker Desktop, then copy `.env.example` to `.env` in the project root. Set `JWT_SECRET` to a long random value. The OpenRouter key is optional.
 
 Start the complete app, including MongoDB, with:
 
