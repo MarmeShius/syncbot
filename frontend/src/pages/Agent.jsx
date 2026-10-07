@@ -1,10 +1,11 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Sparkles,
   ArrowLeft,
   Search,
   Send,
   FileText,
+  Users,
 } from "lucide-react";
 import { apiRequest } from "../api";
 import { useAuth } from "../context/useAuth";
@@ -28,6 +29,8 @@ function Agent() {
   const { socket } = useSocket();
 
   const [tickets, setTickets] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [activeView, setActiveView] = useState("queue");
   const [selected, setSelected] = useState(null);
 
   const [filters, setFilters] = useState({
@@ -60,6 +63,19 @@ function Agent() {
     }
   }
 
+  const loadCustomers = useCallback(async () => {
+    try {
+      const result = await apiRequest("/agent/customers");
+      setCustomers(result.customers || []);
+    } catch (loadError) {
+      setError(loadError.message);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadCustomers();
+  }, [loadCustomers]);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       loadTickets();
@@ -71,6 +87,11 @@ function Agent() {
   // Real-time Socket.IO synchronization
   useEffect(() => {
     if (!socket) return;
+
+    const handleCustomerRegistered = ({ customer }) => {
+      if (!customer) return;
+      setCustomers((prev) => [customer, ...prev.filter((item) => item.id !== customer.id)]);
+    };
 
     const handleUpdate = ({ ticket }) => {
       setTickets((prev) => prev.map((t) => (t.id === ticket.id ? ticket : t)));
@@ -86,6 +107,7 @@ function Agent() {
     socket.on("ticket:message", handleUpdate);
     socket.on("ticket:note", handleUpdate);
     socket.on("ticket:csat", handleUpdate);
+    socket.on("customer:registered", handleCustomerRegistered);
 
     return () => {
       socket.off("ticket:created", handleCreated);
@@ -93,6 +115,7 @@ function Agent() {
       socket.off("ticket:message", handleUpdate);
       socket.off("ticket:note", handleUpdate);
       socket.off("ticket:csat", handleUpdate);
+      socket.off("customer:registered", handleCustomerRegistered);
     };
   }, [socket]);
 
@@ -222,16 +245,38 @@ function Agent() {
         )}
 
         {!selected ? (
-          <Queue
-            metrics={metrics}
-            tickets={tickets}
-            filters={filters}
-            setFilters={setFilters}
-            openTicket={(ticket) => {
-              setSelected(ticket);
-              setAnalysis(null);
-            }}
-          />
+          <>
+            <div className="mb-6 flex gap-2 border-b border-slate-200 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setActiveView("queue")}
+                className={`border-b-2 px-4 py-3 text-sm font-semibold ${activeView === "queue" ? "border-emerald-500 text-emerald-700 dark:text-emerald-400" : "border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white"}`}
+              >
+                Ticket Queue
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveView("customers")}
+                className={`inline-flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-semibold ${activeView === "customers" ? "border-emerald-500 text-emerald-700 dark:text-emerald-400" : "border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white"}`}
+              >
+                <Users className="h-4 w-4" /> Customers <span className="text-xs">({customers.length})</span>
+              </button>
+            </div>
+            {activeView === "queue" ? (
+              <Queue
+                metrics={metrics}
+                tickets={tickets}
+                filters={filters}
+                setFilters={setFilters}
+                openTicket={(ticket) => {
+                  setSelected(ticket);
+                  setAnalysis(null);
+                }}
+              />
+            ) : (
+              <CustomerDirectory customers={customers} />
+            )}
+          </>
         ) : (
           <Details
             selected={selected}
@@ -256,6 +301,52 @@ function Agent() {
         )}
       </main>
     </div>
+  );
+}
+
+/* =========================================
+   CUSTOMER DIRECTORY
+========================================= */
+
+function CustomerDirectory({ customers }) {
+  const [search, setSearch] = useState("");
+  const filteredCustomers = customers.filter((customer) =>
+    `${customer.name} ${customer.username} ${customer.email}`.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xs dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex flex-col gap-3 border-b border-slate-100 p-5 sm:flex-row sm:items-center sm:justify-between dark:border-slate-800">
+        <div>
+          <h2 className="font-bold text-slate-900 dark:text-white">Registered Customers</h2>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">New registrations appear here automatically.</p>
+        </div>
+        <input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Search name, username, or email"
+          className="w-full rounded-xl border border-slate-200 bg-transparent px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-emerald-600 focus:outline-none sm:max-w-sm dark:border-slate-700 dark:text-white"
+        />
+      </div>
+      <div className="divide-y divide-slate-100 dark:divide-slate-800">
+        {filteredCustomers.map((customer) => (
+          <div key={customer.id} className="flex flex-col gap-1 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="font-semibold text-slate-900 dark:text-white">{customer.name}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">@{customer.username} · {customer.email}</p>
+            </div>
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {customer.createdAt ? `Registered ${new Date(customer.createdAt).toLocaleDateString()}` : "Registration date unavailable"}
+            </p>
+          </div>
+        ))}
+        {!filteredCustomers.length && (
+          <div className="p-10 text-center text-sm text-slate-500 dark:text-slate-400">
+            {customers.length ? "No customers match your search." : "No registered customers yet."}
+          </div>
+        )}
+      </div>
+    </section>
   );
 }
 

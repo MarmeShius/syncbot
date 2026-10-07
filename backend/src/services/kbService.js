@@ -1,4 +1,4 @@
-import { generateGeminiText } from "./gemini.js";
+import { generateOpenRouterText } from "./openrouter.js";
 
 export const DEFAULT_KB_ARTICLES = [
   {
@@ -120,33 +120,7 @@ export async function generateRAGAnswer(query, articles) {
     };
   }
 
-  const context = matches
-    .map(
-      (m, idx) =>
-        `[Source ${idx + 1}]: "${m.title}" (${m.category})\n${m.content}`
-    )
-    .join("\n\n");
-
-  if (process.env.GEMINI_API_KEY) {
-    try {
-      const answer = await generateGeminiText({
-        systemPrompt: "You are SyncBot Knowledge Copilot. Answer strictly using the provided Knowledge Base articles. Include citations to source article titles. Keep the answer concise, accurate, and practical.",
-        userPrompt: `Knowledge Base Context:\n${context}\n\nUser Question:\n${query}`,
-        temperature: 0.2,
-      });
-      if (answer) {
-        return {
-          answer,
-          sources: matches.map((m) => ({ id: m.id, title: m.title, category: m.category })),
-          mode: "gemini-rag",
-        };
-      }
-    } catch (err) {
-      console.error("Gemini RAG search failed:", err.message);
-    }
-  }
-
-  // Local rule-based RAG synthesis fallback
+  // Use matching MongoDB articles locally, without calling the AI provider.
   const top = matches[0];
   const firstSnippet = top.content
     .split("\n")
@@ -171,18 +145,19 @@ export async function suggestTicketTitle(description, category = "General Inquir
     return { title: `${category} Request` };
   }
 
-  if (process.env.GEMINI_API_KEY) {
+  if (process.env.OPENROUTER_API_KEY) {
     try {
-      const title = await generateGeminiText({
+      const title = await generateOpenRouterText({
         systemPrompt: "You are an AI support ticket triager. Write a concise, clear, professional ticket title (4 to 8 words maximum) summarizing the customer issue. Return only the title as plain text without quotes.",
         userPrompt: `Category: ${category}\nDescription:\n${description}`,
         temperature: 0.3,
       });
       if (title) {
-        return { title: title.replace(/^["']|["']$/g, ""), mode: "gemini" };
+        return { title: title.replace(/^["']|["']$/g, ""), mode: "openrouter" };
       }
     } catch (err) {
-      console.error("AI title generation failed:", err.message);
+      console.error("OpenRouter title generation failed:", err.message);
+      throw err;
     }
   }
 

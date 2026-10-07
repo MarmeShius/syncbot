@@ -57,13 +57,22 @@ export async function sendEmail({ to, subject, html, text }) {
   if (!to) return null;
   try {
     const mail = getTransporter();
-    return await mail.sendMail({
+    const result = await mail.sendMail({
       from: defaultFrom(),
       to,
       subject,
       text: text || html?.replace(/<[^>]+>/g, "") || "",
       html: html || `<p>${escapeHtml(text)}</p>`,
     });
+    if (process.env.NODE_ENV !== "test") {
+      const isSimulation = String(result.messageId || "").startsWith("dev-sim-");
+      console.info(
+        isSimulation
+          ? "Email was simulated in development; no email was sent."
+          : `Email accepted by SMTP (${result.messageId || "message id unavailable"}).`
+      );
+    }
+    return result;
   } catch (error) {
     console.error("Email send failed:", error.message);
     return null;

@@ -29,7 +29,7 @@ import {
   onTicketResolved,
 } from "./services/slaService.js";
 import { findLeastLoadedAgent } from "./services/assignmentService.js";
-import { generateGeminiText } from "./services/gemini.js";
+import { generateOpenRouterText } from "./services/openrouter.js";
 import {
   DEFAULT_KB_ARTICLES,
   searchArticles,
@@ -353,9 +353,12 @@ app.post("/api/auth/register", async (req, res) => {
 
   const user = process.env.MONGO_URI
     ? await User.create(data)
-    : (memory.users.push({ id: new mongoose.Types.ObjectId().toString(), ...data }), memory.users.at(-1));
+    : (memory.users.push({ id: new mongoose.Types.ObjectId().toString(), ...data, createdAt: new Date().toISOString() }), memory.users.at(-1));
 
   notifyNewRegistration(user);
+  const customer = { ...publicUser(user), createdAt: user.createdAt || new Date().toISOString() };
+  io.to("role:agent").emit("customer:registered", { customer });
+  io.to("role:admin").emit("customer:registered", { customer });
   res.status(201).json({ token: tokenFor(user), user: publicUser(user) });
 });
 
@@ -373,6 +376,25 @@ app.post("/api/auth/login", async (req, res) => {
 });
 
 app.get("/api/users/me", auth, (req, res) => res.json({ user: publicUser(req.user) }));
+
+// CUSTOMER DIRECTORY (agents and admins)
+app.get("/api/agent/customers", auth, roles("agent", "admin"), async (_req, res) => {
+  const customers = process.env.MONGO_URI
+    ? await User.find({ role: "customer", active: true })
+        .select("name username email role active createdAt")
+        .sort({ createdAt: -1 })
+    : memory.users
+        .filter((user) => user.role === "customer" && user.active)
+        .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+
+  res.json({
+    customers: customers.map((customer) => ({
+      ...publicUser(customer),
+      active: customer.active,
+      createdAt: customer.createdAt || null,
+    })),
+  });
+});
 
 // ADMIN USERS
 app.get("/api/admin/users", auth, roles("admin"), async (_req, res) => {
@@ -433,8 +455,13 @@ app.get("/api/categories", auth, (_req, res) => res.json({ categories }));
 // AI TITLE SUGGESTION
 app.post("/api/ai/suggest-title", auth, async (req, res) => {
   const { description, category } = req.body;
-  const result = await suggestTicketTitle(description, category);
-  res.json(result);
+  try {
+    const result = await suggestTicketTitle(description, category);
+    res.json(result);
+  } catch (error) {
+    console.error("Groq title request failed:", error.message);
+    sendError(res, 502, `Groq title request failed: ${error.message}`);
+  }
 });
 
 // AI RAG SEARCH
@@ -443,8 +470,13 @@ app.post("/api/ai/rag-search", auth, async (req, res) => {
   if (!query) return sendError(res, 400, "Query cannot be empty.");
 
   const articles = process.env.MONGO_URI ? await Article.find() : memory.articles;
-  const result = await generateRAGAnswer(query, articles);
-  res.json(result);
+  try {
+    const result = await generateRAGAnswer(query, articles);
+    res.json(result);
+  } catch (error) {
+    console.error("Groq RAG request failed:", error.message);
+    sendError(res, 502, `Groq RAG request failed: ${error.message}`);
+  }
 });
 
 // KNOWLEDGE BASE CRUD
@@ -560,39 +592,48 @@ app.post("/api/ai/chat", auth, async (req, res) => {
   const message = String(req.body.message || "").trim();
   if (!message) return sendError(res, 400, "Message cannot be empty.");
   if (message.length > 1000) return sendError(res, 400, "Message is too long.");
+
   const isStaff = ["agent", "admin"].includes(req.user.role);
 
-  const articles = process.env.MONGO_URI ? await Article.find() : memory.articles;
-  const ragResult = await generateRAGAnswer(message, articles);
-  const hasKnowledgeMatches = (ragResult.sources || []).length > 0;
+  try {
+    const articles = process.env.MONGO_URI ? await Article.find() : memory.articles;
+    const ragResult = await generateRAGAnswer(message, articles);
+    const hasKnowledgeMatches = (ragResult.sources || []).length > 0;
 
-  if (process.env.GEMINI_API_KEY) {
-    try {
+    if (hasKnowledgeMatches) {
+      return res.json({
+        reply: ragResult.answer,
+        mode: "local-rag",
+        sources: ragResult.sources,
+      });
+    }
+
+    if (process.env.OPENROUTER_API_KEY) {
       const rolePrompt = isStaff
         ? "You are SyncBot Agent Copilot for a support agent or administrator. Help with triaging queues, prioritizing complaints, drafting professional customer replies, explaining statuses, and citing knowledge base articles when relevant."
         : "You are SyncBot Customer Assistant. Give concise, practical guidance. If the customer needs personal investigation, tell them to open a ticket.";
-      const groundingPrompt = hasKnowledgeMatches
-        ? "Use the supplied Knowledge Base context to answer and cite its article titles. Do not invent company policies or guarantees."
-        : "No matching Knowledge Base article was found. Answer the user's general question using your general knowledge. Make clear that this is general guidance, not a confirmed SyncBot or company policy. Do not invent account-specific facts, policies, or guarantees; direct the user to support for those.";
-      const systemPrompt = `${rolePrompt} ${groundingPrompt}`;
-      const knowledgeContext = hasKnowledgeMatches
-        ? ragResult.answer
-        : "No matching Knowledge Base article was found. Answer from general knowledge, and clearly distinguish general guidance from company-specific information.";
 
-      const reply = await generateGeminiText({
-        systemPrompt,
-        userPrompt: `Context from Knowledge Base:\n${knowledgeContext}\n\nUser Question:\n${message}`,
+      const groundingPrompt =
+        "No matching Knowledge Base article was found. Answer the user's general question using your general knowledge. Make clear that this is general guidance, not confirmed SyncBot or company policy. Do not invent account-specific facts, policies, or guarantees; direct the user to support for those.";
+
+      const reply = await generateOpenRouterText({
+        systemPrompt: `${rolePrompt} ${groundingPrompt}`,
+        userPrompt: `User Question:\n${message}`,
         temperature: 0.2,
       });
-      if (reply) {
-        return res.json({ reply, mode: hasKnowledgeMatches ? "gemini-rag" : "gemini-general", sources: ragResult.sources });
-      }
-    } catch (error) {
-      console.error("Gemini chat request failed", error.message);
-    }
-  }
 
-  res.json({ reply: ragResult.answer, mode: "local-rag", sources: ragResult.sources });
+      return res.json({ reply, mode: "openrouter-general", sources: [] });
+    }
+
+    return res.json({
+      reply: ragResult.answer,
+      mode: "local-rag",
+      sources: ragResult.sources,
+    });
+  } catch (error) {
+    console.error("OpenRouter chat request failed:", error.message);
+    return sendError(res, 502, `OpenRouter chat request failed: ${error.message}`);
+  }
 });
 
 // TICKETS
@@ -601,8 +642,6 @@ async function visibleTickets(user) {
     const filter =
       user.role === "customer"
         ? { customer: user._id }
-        : user.role === "agent"
-        ? { $or: [{ assignedAgent: user._id }, { assignedAgent: null }] }
         : {};
     return Ticket.find(filter).populate("customer assignedAgent").sort({ createdAt: -1 });
   }
@@ -610,10 +649,6 @@ async function visibleTickets(user) {
     if (user.role === "customer") {
       const custId = ticket.customer?._id || ticket.customer?.id || ticket.customer;
       return String(custId) === String(user.id);
-    }
-    if (user.role === "agent") {
-      const agentId = ticket.assignedAgent?._id || ticket.assignedAgent?.id || ticket.assignedAgent;
-      return !agentId || String(agentId) === String(user.id);
     }
     return true;
   });
@@ -1109,7 +1144,7 @@ app.post("/api/tickets/:id/ai-analysis", auth, roles("agent", "admin"), async (r
     recommendedAction: `Review the ${category.toLowerCase()} details and confirm the resolution with the customer.`,
   };
 
-  if (!process.env.GEMINI_API_KEY) return res.json({ analysis: fallback, mode: "local-fallback" });
+  if (!process.env.GROQ_API_KEY) return res.json({ analysis: fallback, mode: "local-fallback" });
 
   try {
     const conversation = (ticket.messages || [])
@@ -1118,7 +1153,7 @@ app.post("/api/tickets/:id/ai-analysis", auth, roles("agent", "admin"), async (r
       .map((message) => `${message.author?.name || "User"}: ${message.body}`)
       .join("\n");
 
-    const content = await generateGeminiText({
+    const content = await generateGroqText({
       systemPrompt:
         "You are an AI support operations assistant. Analyze the supplied ticket only. Return valid JSON with exactly these string keys: summary, category, priority, sentiment, suggestedResponse, recommendedAction. Category must be one of Technical Issue, Billing, Account, Product, General Inquiry. Priority must be one of Low, Medium, High, Critical.",
       userPrompt: JSON.stringify({
@@ -1133,14 +1168,10 @@ app.post("/api/tickets/:id/ai-analysis", auth, roles("agent", "admin"), async (r
       responseMimeType: "application/json",
     });
     const analysis = { ...fallback, ...JSON.parse(content) };
-    return res.json({ analysis, mode: "gemini" });
+    return res.json({ analysis, mode: "groq" });
   } catch (error) {
     console.error("AI ticket analysis failed:", error.message);
-    return res.json({
-      analysis: fallback,
-      mode: "local-fallback",
-      warning: "The AI provider was unavailable, so the local analysis was returned.",
-    });
+    return sendError(res, 502, `Groq ticket analysis failed: ${error.message}`);
   }
 });
 
