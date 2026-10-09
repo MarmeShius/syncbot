@@ -73,7 +73,10 @@ function Agent() {
   }, []);
 
   useEffect(() => {
-    loadCustomers();
+    const timer = setTimeout(() => {
+      loadCustomers();
+    }, 0);
+    return () => clearTimeout(timer);
   }, [loadCustomers]);
 
   useEffect(() => {
