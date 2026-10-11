@@ -53,16 +53,30 @@ function ChatAssistant() {
         <section className="mb-3 flex h-[min(30rem,calc(100vh-8rem))] w-[min(24rem,calc(100vw-2rem))] min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl transition-all dark:border-slate-800 dark:bg-slate-900">
           {/* Header */}
           <header className="flex items-center justify-between border-b border-emerald-800 bg-emerald-900 px-4 py-3 text-white">
-            <div className="flex items-center gap-2">
-              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-700">
-                <Sparkles className="h-4 w-4 text-emerald-200" />
+            <div className="flex items-center gap-3">
+              <div className="assistant-avatar relative flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-emerald-200/70 bg-emerald-100 shadow-md" role="img" aria-label="Animated customer support assistant">
+                <svg viewBox="0 0 48 48" className="assistant-avatar-art h-full w-full" aria-hidden="true">
+                  <circle cx="24" cy="24" r="24" fill="#D8F3E4" />
+                  <path d="M8 48c1.2-9.1 6.5-14 16-14s14.8 4.9 16 14H8Z" fill="#16845B" />
+                  <path d="M12 20c0-9.1 5.1-15 12-15s12 5.9 12 15v5H12v-5Z" fill="#314C45" />
+                  <path d="M15 20c0-6.7 3.8-11 9-11s9 4.3 9 11v5c0 6.4-3.8 10-9 10s-9-3.6-9-10v-5Z" fill="#F1C5A5" />
+                  <path d="M14 21c1.1-8.2 5.2-12.3 11-12.3 3.3 0 6.2 1.8 8.4 4.8-3.2-.6-6.6-2.4-8.3-4.1-2.5 4.9-6.2 7.7-11.1 8.4V21Z" fill="#314C45" />
+                  <path d="M18.5 23h.1m10.8 0h.1" stroke="#4D403B" strokeWidth="2.2" strokeLinecap="round" />
+                  <path d="M21 28c1.8 1.7 4.2 1.7 6 0" stroke="#A85D53" strokeWidth="1.8" strokeLinecap="round" />
+                  <path d="M12 21c0-5.4 3-9 7-9m17 9c0-5.4-3-9-7-9" stroke="#F4D7B2" strokeWidth="2.8" strokeLinecap="round" />
+                  <path d="M12 19v7m24-7v7" stroke="#0F6B4A" strokeWidth="3.5" strokeLinecap="round" />
+                  <path d="M36 26c0 3.5-2.2 5-5.5 5" stroke="#0F6B4A" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+                <span className="assistant-avatar-sparkle absolute -right-0.5 bottom-0 flex h-4 w-4 items-center justify-center rounded-full border border-emerald-900 bg-emerald-500"><Sparkles className="h-2.5 w-2.5 text-white" /></span>
               </div>
               <div>
                 <h3 className="text-sm font-bold leading-tight">SyncBot Copilot</h3>
-                <p className="text-[11px] text-emerald-200">RAG Knowledge-Grounded</p>
+                <p className="mt-0.5 text-[10px] font-medium text-emerald-200/80">Your support sidekick</p>
               </div>
             </div>
             <button
+              type="button"
+              aria-label="Close support assistant"
               onClick={() => setOpen(false)}
               className="rounded-lg p-1 text-emerald-200 hover:bg-emerald-800 hover:text-white"
             >

@@ -18,8 +18,7 @@ function Footer() {
 
           <p className="max-w-md text-sm leading-7 text-slate-400 sm:text-base">
             SyncBot is an AI-powered customer support and ticket management
-            platform designed to help businesses manage customer issues,
-            real-time conversations, SLAs, and knowledge base inquiries efficiently.
+            platform designed to help businesses manage customer issues.
           </p>
         </div>
 
@@ -36,9 +35,7 @@ function Footer() {
             <Link to="/about" className="transition hover:text-white">
               About Us
             </Link>
-            <Link to="/kb" className="transition hover:text-white">
-              Knowledge Base
-            </Link>
+          
             <Link to="/login" className="transition hover:text-white">
               Login
             </Link>
@@ -55,11 +52,8 @@ function Footer() {
           </h3>
 
           <ul className="space-y-2.5 text-sm text-slate-400">
-            <li>AI Ticket Triaging & Title Suggestion</li>
-            <li>Real-Time Socket.IO Synchronization</li>
-            <li>SLA Tracking & Breach Monitoring</li>
-            <li>Automatic Least-Loaded Assignment</li>
-            <li>Knowledge Base RAG Grounding</li>
+            <li>AI Ticket & Title Suggestion</li>
+            <li>Real time Conversation </li>
             <li>Customer Satisfaction (CSAT)</li>
           </ul>
         </div>
