@@ -57,7 +57,7 @@ function Home() {
           <div className="home-reveal">
             <div className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white/80 px-4 py-2 text-sm font-semibold text-emerald-800 shadow-sm dark:border-emerald-900 dark:bg-slate-900/80 dark:text-emerald-300">
               <span className="relative flex h-2.5 w-2.5"><span className="absolute h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" /><span className="relative h-2.5 w-2.5 rounded-full bg-emerald-500" /></span>
-              Customer support, made more human
+              Maryam's Support Portal
             </div>
 
             <p className="mt-8 text-sm font-bold uppercase tracking-[0.18em] text-emerald-800 dark:text-emerald-300">We’re here to help</p>

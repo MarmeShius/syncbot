@@ -33,7 +33,7 @@ function Navbar() {
 
   return (
     <nav className="fixed inset-x-0 top-0 z-50 bg-[#123b3b]/90 px-3 py-3 backdrop-blur-xl sm:px-5">
-      <div className={`mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-2 gap-y-3 border border-emerald-100/25 bg-gradient-to-r from-[#176b61] via-[#245a70] to-[#475477] px-3 py-2.5 text-white shadow-[0_14px_40px_-18px_rgba(15,60,65,.72)] sm:px-4 ${mobileOpen ? "rounded-3xl" : "rounded-full"}`}>
+      <div className={`mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-2 gap-y-3 border border-emerald-100/25 bg-linear-to-r from-[#176b61] via-[#245a70] to-[#475477] px-3 py-2.5 text-white shadow-[0_14px_40px_-18px_rgba(15,60,65,.72)] sm:px-4 ${mobileOpen ? "rounded-3xl" : "rounded-full"}`}>
         <Link to="/" className="flex min-w-0 shrink-0 items-center gap-1.5" aria-label="SyncBot home">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-xl font-black text-white shadow-lg shadow-emerald-950/30 transition-transform hover:rotate-3 hover:scale-105">S</span>
           <span className="min-w-0">
