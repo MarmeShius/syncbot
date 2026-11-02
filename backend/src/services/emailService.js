@@ -1,13 +1,21 @@
 import nodemailer from "nodemailer";
 
 let transporter = null;
+export const emailTestOutbox = [];
 
 function getTransporter() {
   if (transporter) return transporter;
 
   const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
 
-  if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
+  if (process.env.NODE_ENV === "test") {
+    transporter = {
+      sendMail: async (mailOptions) => {
+        emailTestOutbox.push(mailOptions);
+        return { messageId: "test-simulation" };
+      },
+    };
+  } else if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
     const port = Number(SMTP_PORT) || 587;
     transporter = nodemailer.createTransport({
       host: SMTP_HOST,
@@ -217,4 +225,54 @@ export async function sendTicketResolvedEmail(ticket, customer) {
       <p>If you still need assistance, reply to the ticket in your Customer Portal.</p>
     </div>`;
   return sendEmail({ to: customer?.email, subject, html });
+}
+
+export async function sendSlaNotificationEmail(ticket, customer, event) {
+  const reference = ticketReference(ticket);
+  const customerName = escapeHtml(customer?.name || "Customer");
+  const subjectText = escapeHtml(ticket.subject);
+  const templates = {
+    responseMet: {
+      subject: `[Ticket #${ticket.ticketNumber || ticket.id}] An agent responded within the service target`,
+      title: "An agent has responded",
+      message: `An agent replied to your ticket <strong>#${reference}</strong> (${subjectText}) within its first-response service target.`,
+    },
+    responseAtRisk: {
+      subject: `[Ticket #${ticket.ticketNumber || ticket.id}] Your response deadline is approaching`,
+      title: "Response deadline approaching",
+      message: `The first-response deadline for your ticket <strong>#${reference}</strong> (${subjectText}) is approaching. Our support team has been notified.`,
+    },
+    responseBreached: {
+      subject: `[Ticket #${ticket.ticketNumber || ticket.id}] We have not responded within the service target`,
+      title: "Response target missed",
+      message: `The first-response deadline for ticket <strong>#${reference}</strong> (${subjectText}) has passed without an agent response. Our support team has been notified.`,
+    },
+    resolutionMet: {
+      subject: `[Ticket #${ticket.ticketNumber || ticket.id}] Resolution service target met`,
+      title: "Your ticket was resolved within its service target",
+      message: `Ticket <strong>#${reference}</strong> (${subjectText}) was resolved within its resolution service target.`,
+    },
+    resolutionAtRisk: {
+      subject: `[Ticket #${ticket.ticketNumber || ticket.id}] Your resolution deadline is approaching`,
+      title: "Resolution deadline approaching",
+      message: `The resolution deadline for ticket <strong>#${reference}</strong> (${subjectText}) is approaching. Our support team has been notified.`,
+    },
+    resolutionBreached: {
+      subject: `[Ticket #${ticket.ticketNumber || ticket.id}] Your resolution deadline has passed`,
+      title: "Resolution target missed",
+      message: `The resolution deadline for ticket <strong>#${reference}</strong> (${subjectText}) has passed. Our support team has been notified and is following up.`,
+    },
+  };
+  const notification = templates[event];
+  if (!notification) throw new Error(`Unknown SLA notification event: ${event}`);
+
+  const html = `
+    <div style="font-family:sans-serif;max-width:600px;margin:auto;padding:20px;border:1px solid #e2e8f0;border-radius:8px">
+      <h2 style="color:#065f46;margin-top:0">SyncBot Service Target Update</h2>
+      <p>Hello <strong>${customerName}</strong>,</p>
+      <p>${notification.message}</p>
+      <p>Sign in to your SyncBot Customer Portal to view the ticket and any updates.</p>
+      <p style="color:#64748b;font-size:13px">SyncBot Support Operations</p>
+    </div>`;
+  return sendEmail({ to: customer?.email, subject: notification.subject, html });
 }

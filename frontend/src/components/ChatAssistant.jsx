@@ -1,9 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Sparkles, Send, X, MessageSquare, BookOpen, Loader2 } from "lucide-react";
 import { apiRequest } from "../api";
+import { useAuth } from "../context/useAuth";
 
-function ChatAssistant() {
+function ChatAssistant({ ticketAssistantRequest = 0, onTicketCreated }) {
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
+  const [ticketMode, setTicketMode] = useState(false);
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState([
     {
@@ -13,6 +16,8 @@ function ChatAssistant() {
     },
   ]);
   const [busy, setBusy] = useState(false);
+  const [creatingTicket, setCreatingTicket] = useState(false);
+  const [ticketError, setTicketError] = useState("");
 
   const quickPrompts = [
     "How to reset password?",
@@ -20,23 +25,59 @@ function ChatAssistant() {
     "What are ticket SLA deadlines?",
   ];
 
+  useEffect(() => {
+    if (!ticketAssistantRequest) return;
+    setOpen(true);
+    setTicketMode(true);
+    setTicketError("");
+    setMessages([
+      {
+        role: "assistant",
+        text: "Tell me what happened and how it affects you. I’ll ask for any important details, then create a ticket for you.",
+        sources: [],
+      },
+    ]);
+  }, [ticketAssistantRequest]);
+
   async function handleSend(textToSend) {
     const text = (textToSend || message).trim();
     if (!text || busy) return;
 
-    setMessages((current) => [...current, { role: "user", text, sources: [] }]);
+    const conversation = [...messages, { role: "user", text, sources: [] }];
+    setMessages(conversation);
     setMessage("");
     setBusy(true);
+    setTicketError("");
 
     try {
-      const result = await apiRequest("/ai/chat", {
+      const result = await apiRequest(ticketMode ? "/ai/ticket-intake" : "/ai/chat", {
         method: "POST",
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify(
+          ticketMode
+            ? {
+              messages: conversation
+              .slice(-12)
+                .map(({ role, text: content }) => ({ role, content })),
+              }
+            : { message: text },
+        ),
       });
-      setMessages((current) => [
-        ...current,
-        { role: "assistant", text: result.reply, sources: result.sources || [] },
-      ]);
+      if (ticketMode && result.ready) {
+        setMessages((current) => [
+          ...current,
+          {
+            role: "assistant",
+            text: result.reply,
+            sources: [],
+          },
+        ]);
+        await createTicketFromDraft(result.draft);
+      } else {
+        setMessages((current) => [
+          ...current,
+          { role: "assistant", text: result.reply, sources: result.sources || [] },
+        ]);
+      }
     } catch (error) {
       setMessages((current) => [
         ...current,
@@ -44,6 +85,36 @@ function ChatAssistant() {
       ]);
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function createTicketFromDraft(draft) {
+    if (!draft || creatingTicket) return;
+    setCreatingTicket(true);
+    setTicketError("");
+    try {
+      const result = await apiRequest("/tickets", {
+        method: "POST",
+        body: JSON.stringify({
+          ...draft,
+          contact: user.email,
+          attachments: [],
+        }),
+      });
+      setMessages((current) => [
+        ...current,
+        {
+          role: "assistant",
+          text: `Your ticket ${result.ticket.id} has been created. You can follow updates in your dashboard.`,
+          sources: [],
+        },
+      ]);
+      setOpen(false);
+      onTicketCreated?.(result.ticket);
+    } catch (error) {
+      setTicketError(error.message || "Failed to create your ticket.");
+    } finally {
+      setCreatingTicket(false);
     }
   }
 
@@ -71,7 +142,9 @@ function ChatAssistant() {
               </div>
               <div>
                 <h3 className="text-sm font-bold leading-tight">SyncBot Copilot</h3>
-                <p className="mt-0.5 text-[10px] font-medium text-emerald-200/80">Your support sidekick</p>
+                <p className="mt-0.5 text-[10px] font-medium text-emerald-200/80">
+                  {ticketMode ? "AI ticket assistant" : "Your support sidekick"}
+                </p>
               </div>
             </div>
             <button
@@ -128,26 +201,63 @@ function ChatAssistant() {
             {busy && (
               <div className="flex items-center gap-1.5 text-xs text-slate-400 dark:text-slate-500">
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600" />
-                <span>Assistant is thinking...</span>
+                <span>
+                  {creatingTicket
+                    ? "Creating your ticket..."
+                    : ticketMode
+                    ? "Reviewing your issue..."
+                    : "Assistant is thinking..."}
+                </span>
               </div>
             )}
           </div>
 
-          {/* Quick prompts */}
+          {ticketError && (
+            <p className="border-t border-red-100 bg-red-50 px-3 py-2 text-[11px] text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300" role="alert">
+              {ticketError}
+            </p>
+          )}
+
+          {/* Quick prompts and assistant mode */}
           <div className="border-t border-slate-100 bg-slate-50/80 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/40">
-            <div className="flex flex-wrap gap-1">
-              {quickPrompts.map((prompt) => (
-                <button
-                  key={prompt}
-                  type="button"
-                  onClick={() => handleSend(prompt)}
-                  disabled={busy}
-                  className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600 hover:border-emerald-500 hover:text-emerald-600 disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400"
-                >
-                  {prompt}
-                </button>
-              ))}
+            <div className="mb-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setTicketMode((current) => !current);
+                  setTicketError("");
+                  setMessages([
+                    {
+                      role: "assistant",
+                      text: ticketMode
+                        ? "Hi! I am SyncBot Assistant. Ask me anything about tickets, billing, SLAs, or technical troubleshooting."
+                        : "Tell me what happened and how it affects you. I’ll ask for any important details, then create a ticket for you.",
+                      sources: [],
+                    },
+                  ]);
+                }}
+                disabled={busy}
+                className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-white px-2.5 py-1 text-[10px] font-semibold text-emerald-800 hover:border-emerald-500 disabled:opacity-50 dark:border-emerald-900 dark:bg-slate-900 dark:text-emerald-300"
+              >
+                <Sparkles className="h-3 w-3" />
+                {ticketMode ? "Back to support chat" : "Create a ticket with AI"}
+              </button>
             </div>
+            {!ticketMode && (
+              <div className="flex flex-wrap gap-1">
+                {quickPrompts.map((prompt) => (
+                  <button
+                    key={prompt}
+                    type="button"
+                    onClick={() => handleSend(prompt)}
+                    disabled={busy}
+                    className="rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-medium text-slate-600 hover:border-emerald-500 hover:text-emerald-600 disabled:opacity-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Chat input */}
@@ -162,7 +272,7 @@ function ChatAssistant() {
               <input
                 value={message}
                 onChange={(event) => setMessage(event.target.value)}
-                placeholder="Ask support question..."
+                placeholder={ticketMode ? "Describe your issue..." : "Ask support question..."}
                 className="flex-1 rounded-xl border border-slate-200 bg-transparent px-3 py-2 text-xs text-slate-900 placeholder-slate-400 focus:border-emerald-600 focus:outline-none dark:border-slate-700 dark:text-white dark:placeholder-slate-500"
               />
               <button

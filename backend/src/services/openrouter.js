@@ -1,15 +1,22 @@
 const OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions";
+let rejectedApiKey = null;
 
 export async function generateOpenRouterText({
   systemPrompt,
   userPrompt,
   temperature = 0.2,
   responseMimeType,
+  model: requestedModel,
+  maxTokens,
+  timeoutMs = 60000,
 }) {
   const apiKey = process.env.OPENROUTER_API_KEY;
   if (!apiKey) return null;
+  if (apiKey === rejectedApiKey) {
+    throw new Error("OpenRouter rejected this API key earlier. Update OPENROUTER_API_KEY and restart the backend to retry.");
+  }
 
-  const model = process.env.OPENROUTER_MODEL || "openai/gpt-oss-20b";
+  const model = requestedModel || process.env.OPENROUTER_MODEL || "openai/gpt-oss-20b";
   const response = await fetch(OPENROUTER_API_URL, {
     method: "POST",
     headers: {
@@ -24,12 +31,15 @@ export async function generateOpenRouterText({
         { role: "user", content: userPrompt },
       ],
       temperature,
+      ...(maxTokens ? { max_tokens: maxTokens } : {}),
       ...(responseMimeType === "application/json"
         ? { response_format: { type: "json_object" } }
         : {}),
     }),
-    signal: AbortSignal.timeout(60000),
+    signal: AbortSignal.timeout(timeoutMs),
   });
+
+  if (response.status === 401) rejectedApiKey = apiKey;
 
   let data;
   try {

@@ -34,6 +34,11 @@ This project was made for a MERN stack assignment. The main purpose was to build
 - Use a private admin account
 - Open the admin dashboard
 - View the support system overview
+- See each agent's distinct customers and unresolved ticket count in **Agent Workload**
+- Track distinct customers with resolved or closed tickets separately; this history does not affect assignment
+- Automatically route new tickets to the active agent with the fewest customers on unresolved tickets; ties go to the agent with fewer unresolved tickets
+
+The workload rule is deterministic, not an AI model. Resolved and closed tickets do not count toward agent workload. Customers are counted once per agent, even if they have multiple unresolved tickets with that agent.
 
 The public registration page creates customer accounts only. Agent and admin accounts are created privately by the owner of the system.
 
@@ -85,6 +90,7 @@ JWT_SECRET=put-a-long-random-secret-here
 MONGO_URI=mongodb+srv://DATABASE_USER:DATABASE_PASSWORD@YOUR_CLUSTER.mongodb.net/syncbot?retryWrites=true&w=majority
 OPENROUTER_API_KEY=
 OPENROUTER_MODEL=openai/gpt-oss-20b
+OPENROUTER_TICKET_MODEL=openai/gpt-4o-mini
 SMTP_HOST=
 SMTP_PORT=587
 SMTP_USER=
@@ -156,11 +162,15 @@ After the account is created, remove the `STAFF_*` values from `.env`. The passw
 
 ## Email notifications
 
-SyncBot sends a welcome email to new customers, notifies active admins about registrations, and sends a sign-in alert to the email address of each user who successfully logs in. It also confirms new tickets to customers, emails support staff and assigned agents, notifies the other participant when a customer or agent replies, and emails customers when a ticket status changes. Resolving a ticket sends the resolution and rating message. An automatic status change caused by an agent reply is included in that reply notification.
+SyncBot sends a welcome email to new customers, notifies active admins about registrations, and sends a sign-in alert to the email address of each user who successfully logs in. It also confirms every new ticket to its customer, emails support staff and assigned agents, notifies the other participant on every customer/agent reply, and emails customers when ticket status changes (including resolution and closure). First response and resolution SLA targets send met/breached messages, plus one advance warning near each deadline. The backend checks active ticket deadlines once per minute and saves notification flags so restart/repeated checks do not resend the same SLA event. Internal staff notes stay private and are not emailed to customers.
 
 Email delivery uses SMTP. Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, and `EMAIL_FROM` in `backend/.env` for a local backend, or in the project-root `.env` for Docker Compose. Use SMTP credentials and a sender address approved by your email provider; keep the password private and out of Git. Port `587` is the default, and port `465` uses a secure SMTP connection.
 
 Without SMTP settings, local development logs a simulation and Docker production logs an error; neither delivers real email. After updating Docker environment values or email code, run `docker compose up -d --build backend` from the project root.
+
+## AI ticket assistant
+
+Customers can select **Create with AI** in the customer dashboard, describe their issue in a conversation, and answer any follow-up questions. Once enough information is available for an actionable ticket, the assistant automatically submits it through the existing ticket endpoint, which handles assignment and notifications. The authenticated customer email is used as the ticket contact, and the newly created ticket opens in the dashboard. Ticket intake defaults to the faster `openai/gpt-4o-mini` model; override it with `OPENROUTER_TICKET_MODEL` if needed. When OpenRouter is unconfigured or unavailable, ticket intake and title suggestions use local fallbacks, and customer chat falls back to the local knowledge base. After an API key receives HTTP 401, the backend stops retrying that rejected key to avoid delays; update the key and restart the backend to retry. The assistant identifies fallback responses; staff AI analysis also returns its local analysis instead of failing.
 
 ## AI feature
 
@@ -328,6 +338,7 @@ JWT_SECRET=your-production-random-secret
 MONGO_URI=your-mongodb-atlas-uri
 OPENROUTER_API_KEY=your-openrouter-api-key
 OPENROUTER_MODEL=openai/gpt-oss-20b
+OPENROUTER_TICKET_MODEL=openai/gpt-4o-mini
 ```
 
 Do not put `STAFF_PASSWORD` in GitHub. Create the staff account privately before or after deployment using the backend command, or create it directly in the database with the password hashed by the application.

@@ -110,6 +110,7 @@ function Admin() {
             : item
         )
       );
+      await loadData();
     } catch (updateError) {
       setError(updateError.message);
     }
@@ -130,6 +131,7 @@ function Admin() {
             : item
         )
       );
+      await loadData();
     } catch (updateError) {
       setError(updateError.message);
     }
@@ -154,6 +156,16 @@ function Admin() {
       u.email.toLowerCase().includes(search.toLowerCase()) ||
       u.role.toLowerCase().includes(search.toLowerCase())
   );
+  const nextAssignedAgent = systemSettings.autoAssignEnabled
+    ? analytics?.agentLeaderboard
+        ?.filter((agent) => agent.active)
+        .sort(
+          (a, b) =>
+            a.activeCustomerCount - b.activeCustomerCount ||
+            a.activeTicketCount - b.activeTicketCount ||
+            a.agentId.localeCompare(b.agentId)
+        )[0]?.agentId
+    : null;
 
   const filteredTickets = tickets.filter(
     (t) =>
@@ -179,6 +191,7 @@ function Admin() {
         <nav className="mt-6 flex-1 space-y-1.5 text-xs font-semibold">
           {[
             ["analytics", "Analytics Dashboard", BarChart3],
+            ["workload", "Agent Workload", Users],
             ["dashboard", "Overview & KPIs", Activity],
             ["users", "User Management", Users],
             ["tickets", "Ticket Oversight", Ticket],
@@ -220,6 +233,7 @@ function Admin() {
         <div className="mb-6 flex flex-wrap gap-1.5 lg:hidden">
           {[
             ["analytics", "Analytics", BarChart3],
+            ["workload", "Agent Workload", Users],
             ["dashboard", "Overview", Activity],
             ["users", "Users", Users],
             ["tickets", "Tickets", Ticket],
@@ -418,6 +432,94 @@ function Admin() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          </section>
+        )}
+
+        {activeSection === "workload" && (
+          <section className="space-y-6">
+            <div>
+              <h2 className="text-2xl font-extrabold text-slate-900 dark:text-white">
+                Agent Customer Workload
+              </h2>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                New tickets go to the active agent with the fewest customers on unresolved tickets. Ties are broken by unresolved ticket count, then agent ID. Active means the staff account is enabled; online or away presence is not tracked. This is a workload rule, not an AI decision.
+              </p>
+            </div>
+
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xs dark:border-slate-800 dark:bg-slate-900">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-50 font-bold uppercase tracking-wider text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
+                    <tr>
+                      <th className="px-6 py-3.5">Agent</th>
+                      <th className="px-6 py-3.5">Customers on unresolved tickets</th>
+                      <th className="px-6 py-3.5">Unresolved tickets</th>
+                      <th className="px-6 py-3.5">Customers resolved/closed</th>
+                      <th className="px-6 py-3.5">Account status</th>
+                      <th className="px-6 py-3.5">Next assignment</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {analytics?.agentLeaderboard?.map((agent) => {
+                      return (
+                        <tr key={agent.agentId} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                          <td className="px-6 py-4 font-bold text-slate-900 dark:text-white">
+                            {agent.name}
+                            <span className="block text-[11px] font-normal text-slate-400">{agent.email}</span>
+                          </td>
+                          <td className="px-6 py-4 font-semibold text-slate-700 dark:text-slate-300">
+                            {agent.activeCustomerCount}
+                          </td>
+                          <td className="px-6 py-4 font-semibold text-slate-700 dark:text-slate-300">
+                            {agent.activeTicketCount}
+                          </td>
+                          <td className="px-6 py-4 font-semibold text-emerald-600 dark:text-emerald-400">
+                            {agent.resolvedCustomerCount}
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${
+                              agent.active
+                                ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400"
+                                : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400"
+                            }`}>
+                              {agent.active ? "Active" : "Inactive"}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            {nextAssignedAgent === agent.agentId ? (
+                              <span className="rounded-full bg-blue-50 px-2.5 py-1 text-[10px] font-bold text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+                                Next eligible
+                              </span>
+                            ) : !agent.active ? (
+                              <span className="text-slate-400">Not eligible</span>
+                            ) : !systemSettings.autoAssignEnabled ? (
+                              <span className="text-slate-400">Auto-assign off</span>
+                            ) : (
+                              <span className="text-slate-400">In rotation</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {!analytics?.agentLeaderboard?.length && (
+                      <tr>
+                        <td colSpan="6" className="px-6 py-8 text-center text-slate-400">
+                          No agents are registered.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              {!systemSettings.autoAssignEnabled && (
+                <p className="border-t border-amber-100 bg-amber-50 px-6 py-3 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300">
+                  Automatic assignment is disabled. Enable it in System Settings to route new tickets by customer workload.
+                </p>
+              )}
+              <p className="border-t border-slate-100 px-6 py-3 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                Resolved/closed customers are tracked separately and do not affect new-ticket assignment.
+              </p>
             </div>
           </section>
         )}

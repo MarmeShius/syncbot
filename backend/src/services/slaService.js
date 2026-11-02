@@ -29,6 +29,7 @@ export function computeInitialSLA(priority = "Medium", baseTime = new Date()) {
     resolvedAt: null,
     isResponseBreached: false,
     isResolutionBreached: false,
+    notifications: {},
   };
 }
 
@@ -80,7 +81,12 @@ export function evaluateSLA(sla, currentStatus = "Open") {
 
 export function onStaffReply(sla) {
   if (!sla) return sla;
-  const updated = { ...sla };
+  const updated = {
+    ...sla,
+    notifications: sla.notifications && typeof sla.notifications === "object"
+      ? { ...sla.notifications }
+      : {},
+  };
   if (!updated.firstResponseAt) {
     const now = new Date();
     updated.firstResponseAt = now.toISOString();
@@ -92,11 +98,15 @@ export function onStaffReply(sla) {
 
 export function onTicketResolved(sla) {
   if (!sla) return sla;
-  const updated = { ...sla };
+  const updated = {
+    ...sla,
+    notifications: sla.notifications && typeof sla.notifications === "object"
+      ? { ...sla.notifications }
+      : {},
+  };
   const now = new Date();
   updated.resolvedAt = now.toISOString();
   const resolutionDueTime = new Date(updated.resolutionDue).getTime();
   updated.isResolutionBreached = now.getTime() > resolutionDueTime;
   return updated;
 }
-

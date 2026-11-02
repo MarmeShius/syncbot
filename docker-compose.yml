@@ -22,6 +22,7 @@ services:
       MONGO_URI: ${MONGO_URI:?Set MONGO_URI in the root .env file}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openai/gpt-oss-20b}
+      OPENROUTER_TICKET_MODEL: ${OPENROUTER_TICKET_MODEL:-openai/gpt-4o-mini}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_USER: ${SMTP_USER:-}

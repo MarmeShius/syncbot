@@ -156,8 +156,7 @@ export async function suggestTicketTitle(description, category = "General Inquir
         return { title: title.replace(/^["']|["']$/g, ""), mode: "openrouter" };
       }
     } catch (err) {
-      console.error("OpenRouter title generation failed:", err.message);
-      throw err;
+      console.warn(`OpenRouter title generation failed; using local title: ${err.message}`);
     }
   }
 

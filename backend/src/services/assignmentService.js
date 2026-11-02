@@ -1,46 +1,62 @@
 /**
- * Automatically assigns a ticket to the agent with the lowest number of active tickets.
+ * Summarizes each agent's unresolved customers and tickets.
  *
- * @param {Array|Function} getAgents - Function or array of available agents
- * @param {Array|Function} getTickets - Function or array of all tickets
- * @returns {Object|null} The chosen agent, or null if no agents available
+ * @param {Array} agents - Active agents available for assignment
+ * @param {Array} tickets - All tickets used to measure current workload
+ * @returns {Map<string, { customerCount: number, activeTicketCount: number }>}
  */
-export async function findLeastLoadedAgent(getAgents, getTickets) {
-  const agents = typeof getAgents === "function" ? await getAgents() : getAgents;
-  if (!agents || !agents.length) return null;
-
-  const tickets = typeof getTickets === "function" ? await getTickets() : getTickets;
-
-  // Map agent ID to count of active tickets ("Open" or "In Progress")
-  const loadMap = new Map();
+export function getAgentWorkloads(agents, tickets) {
+  const workloadMap = new Map();
   for (const agent of agents) {
     const agentId = String(agent._id || agent.id);
-    loadMap.set(agentId, 0);
+    workloadMap.set(agentId, { customerIds: new Set(), activeTicketCount: 0 });
   }
 
   for (const ticket of tickets) {
-    const isOngoing = ["Open", "In Progress"].includes(ticket.status);
-    if (!isOngoing) continue;
+    // Resolved and closed tickets no longer contribute to active customer workload.
+    if (["Resolved", "Closed"].includes(ticket.status)) continue;
 
     const assignedId = ticket.assignedAgent?._id || ticket.assignedAgent?.id || ticket.assignedAgent;
-    if (assignedId && loadMap.has(String(assignedId))) {
-      loadMap.set(String(assignedId), loadMap.get(String(assignedId)) + 1);
+    const customerId = ticket.customer?._id || ticket.customer?.id || ticket.customer;
+    const workload = assignedId ? workloadMap.get(String(assignedId)) : null;
+    if (workload) {
+      workload.activeTicketCount += 1;
+      if (customerId) workload.customerIds.add(String(customerId));
     }
   }
 
-  // Find agent with minimum load
-  let lowestLoad = Infinity;
-  let bestAgent = null;
-
-  for (const agent of agents) {
-    const agentId = String(agent._id || agent.id);
-    const load = loadMap.get(agentId) ?? 0;
-    if (load < lowestLoad) {
-      lowestLoad = load;
-      bestAgent = agent;
-    }
-  }
-
-  return bestAgent;
+  return new Map(
+    [...workloadMap].map(([agentId, workload]) => [
+      agentId,
+      {
+        customerCount: workload.customerIds.size,
+        activeTicketCount: workload.activeTicketCount,
+      },
+    ]),
+  );
 }
 
+/**
+ * Assigns to the agent with the fewest active customers, then fewest active tickets.
+ */
+export async function findLeastLoadedAgent(getAgents, getTickets) {
+  const agents = typeof getAgents === "function" ? await getAgents() : getAgents;
+  if (!agents?.length) return null;
+
+  const tickets = typeof getTickets === "function" ? await getTickets() : getTickets;
+  const workloadMap = getAgentWorkloads(agents, tickets);
+  return agents.reduce((bestAgent, agent) => {
+    if (!bestAgent) return agent;
+    const agentId = String(agent._id || agent.id);
+    const bestAgentId = String(bestAgent._id || bestAgent.id);
+    const workload = workloadMap.get(agentId);
+    const bestWorkload = workloadMap.get(bestAgentId);
+    return workload.customerCount < bestWorkload.customerCount ||
+      (workload.customerCount === bestWorkload.customerCount &&
+        (workload.activeTicketCount < bestWorkload.activeTicketCount ||
+          (workload.activeTicketCount === bestWorkload.activeTicketCount &&
+            agentId.localeCompare(bestAgentId) < 0)))
+      ? agent
+      : bestAgent;
+  }, null);
+}

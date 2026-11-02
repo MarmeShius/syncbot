@@ -18,7 +18,8 @@ process.env.DEV_ADMIN_USERNAME = "admin_test";
 process.env.DEV_ADMIN_EMAIL = "admin-test@example.com";
 process.env.DEV_ADMIN_PASSWORD = "Admin123!";
 
-const { app, memory, start } = await import("../src/server.js");
+const { app, memory, start, checkSlaNotifications } = await import("../src/server.js");
+const { emailTestOutbox } = await import("../src/services/emailService.js");
 await start();
 
 let customerToken;
@@ -82,6 +83,7 @@ test("blocks customer-only ticket creation for an agent", async () => {
 });
 
 test("creates a ticket with SLA tracking and automatic agent assignment", async () => {
+  emailTestOutbox.length = 0;
   const response = await request(app)
     .post("/api/tickets")
     .set("Authorization", `Bearer ${customerToken}`)
@@ -107,6 +109,16 @@ test("creates a ticket with SLA tracking and automatic agent assignment", async 
   assert.ok(response.body.ticket.assignedAgent);
   assert.equal(response.body.ticket.assignedAgent.username, "agent_test");
   assert.equal(response.body.ticket.autoAssigned, true);
+  assert.ok(emailTestOutbox.some((mail) => mail.to === "customer-test@example.com" && mail.subject.includes("Received")));
+  assert.ok(emailTestOutbox.some((mail) => mail.to === "agent-test@example.com" && mail.subject.includes("assigned")));
+
+  const analytics = await request(app)
+    .get("/api/analytics/dashboard")
+    .set("Authorization", `Bearer ${adminToken}`);
+  assert.equal(analytics.status, 200);
+  const assignedAgent = analytics.body.agentLeaderboard.find((agent) => agent.email === "agent-test@example.com");
+  assert.equal(assignedAgent.activeCustomerCount, 1);
+  assert.equal(assignedAgent.activeTicketCount, 1);
 });
 
 test("prevents another customer from viewing the ticket", async () => {
@@ -117,25 +129,97 @@ test("prevents another customer from viewing the ticket", async () => {
 });
 
 test("allows an agent to post a reply and sets SLA first response time", async () => {
-  const response = await request(app)
+  emailTestOutbox.length = 0;
+  const sendAgentReply = (body) => request(app)
     .post(`/api/tickets/${ticketId}/messages`)
-    .set("Authorization", `Bearer ${agentToken}`)
-    .send({ body: "We are reviewing your login issue right now." });
+    .set("Authorization", "Bearer " + agentToken)
+    .send({ body });
+  const response = await sendAgentReply("We are reviewing your login issue right now.");
+  const secondReply = await sendAgentReply("I have checked the account details as well.");
 
   assert.equal(response.status, 201);
+  assert.equal(secondReply.status, 201);
   assert.equal(response.body.ticket.status, "In Progress");
   assert.ok(response.body.ticket.sla.firstResponseAt);
+  await new Promise((resolve) => setImmediate(resolve));
+  const customerMessages = emailTestOutbox.filter(
+    (mail) => mail.to === "customer-test@example.com" && mail.subject.includes("New update from Test Agent"),
+  );
+  assert.equal(customerMessages.length, 2);
+  assert.ok(emailTestOutbox.some((mail) => mail.to === "customer-test@example.com" && mail.subject.includes("responded within the service target")));
+});
+
+test("emails the assigned agent every time the customer replies", async () => {
+  emailTestOutbox.length = 0;
+  const sendCustomerReply = (body) => request(app)
+    .post(`/api/tickets/${ticketId}/messages`)
+    .set("Authorization", "Bearer " + customerToken)
+    .send({ body });
+  const response = await sendCustomerReply("I can reproduce the sign-in problem on my phone too.");
+  const secondReply = await sendCustomerReply("The problem also appears in another browser.");
+
+  assert.equal(response.status, 201);
+  assert.equal(secondReply.status, 201);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(
+    emailTestOutbox.filter((mail) => mail.to === "agent-test@example.com" && mail.subject.includes("Test Customer")).length,
+    2,
+  );
 });
 
 test("allows an agent to update status to Resolved", async () => {
+  emailTestOutbox.length = 0;
   const response = await request(app)
     .patch(`/api/tickets/${ticketId}`)
-    .set("Authorization", `Bearer ${agentToken}`)
+    .set("Authorization", "Bearer " + agentToken)
     .send({ status: "Resolved" });
 
   assert.equal(response.status, 200);
   assert.equal(response.body.ticket.status, "Resolved");
   assert.ok(response.body.ticket.sla.resolvedAt);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.ok(emailTestOutbox.some((mail) => mail.to === "customer-test@example.com" && mail.subject.includes("Marked as Resolved")));
+  assert.ok(emailTestOutbox.some((mail) => mail.to === "customer-test@example.com" && mail.subject.includes("Resolution service target met")));
+
+  emailTestOutbox.length = 0;
+  const closed = await request(app)
+    .patch(`/api/tickets/${ticketId}`)
+    .set("Authorization", "Bearer " + agentToken)
+    .send({ status: "Closed" });
+  assert.equal(closed.status, 200);
+  assert.ok(emailTestOutbox.some((mail) => mail.to === "customer-test@example.com" && mail.subject.includes("Status update: Closed")));
+});
+
+test("emails customers once when SLA deadlines pass without a response", async () => {
+  const overdueTicket = {
+    id: "sla-overdue-test",
+    ticketNumber: "sla-overdue-test",
+    subject: "Overdue support request",
+    status: "Open",
+    customer: { name: "Test Customer", email: "customer-test@example.com" },
+    sla: {
+      responseDue: new Date(0).toISOString(),
+      resolutionDue: new Date(0).toISOString(),
+      firstResponseAt: null,
+      resolvedAt: null,
+      notifications: {},
+    },
+  };
+  memory.tickets.push(overdueTicket);
+  emailTestOutbox.length = 0;
+
+  try {
+    await checkSlaNotifications(Date.now());
+    const firstRunCount = emailTestOutbox.length;
+    await checkSlaNotifications(Date.now());
+
+    assert.equal(firstRunCount, 2);
+    assert.equal(emailTestOutbox.length, firstRunCount);
+    assert.ok(emailTestOutbox.some((mail) => mail.subject.includes("have not responded")));
+    assert.ok(emailTestOutbox.some((mail) => mail.subject.includes("resolution deadline has passed")));
+  } finally {
+    memory.tickets = memory.tickets.filter((ticket) => ticket !== overdueTicket);
+  }
 });
 
 test("allows customer to submit CSAT satisfaction rating", async () => {
@@ -149,17 +233,159 @@ test("allows customer to submit CSAT satisfaction rating", async () => {
   assert.equal(response.body.csat.feedback, "Excellent and fast support!");
 });
 
-test("generates an AI ticket title suggestion", async () => {
-  const response = await request(app)
+test("falls back to a local ticket title when OpenRouter rejects the API key", async () => {
+  const previousFetch = globalThis.fetch;
+  const previousApiKey = process.env.OPENROUTER_API_KEY;
+  let providerCalls = 0;
+  process.env.OPENROUTER_API_KEY = "rejected-test-key";
+  globalThis.fetch = async () => {
+    providerCalls += 1;
+    return new Response(JSON.stringify({ error: { message: "User not found." } }), { status: 401 });
+  };
+
+  try {
+    const makeRequest = () => request(app)
     .post("/api/ai/suggest-title")
     .set("Authorization", `Bearer ${customerToken}`)
     .send({
       description: "My subscription payment was charged twice this morning.",
       category: "Billing",
     });
+    const response = await makeRequest();
+    const retriedResponse = await makeRequest();
 
-  assert.equal(response.status, 200);
-  assert.ok(response.body.title);
+    assert.equal(response.status, 200);
+    assert.ok(response.body.title);
+    assert.equal(response.body.mode, "local-fallback");
+    assert.equal(retriedResponse.status, 200);
+    assert.equal(retriedResponse.body.mode, "local-fallback");
+    assert.equal(providerCalls, 1);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousApiKey === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = previousApiKey;
+  }
+});
+
+test("requires a customer conversation to start AI ticket intake", async () => {
+  const response = await request(app)
+    .post("/api/ai/ticket-intake")
+    .set("Authorization", "Bearer " + customerToken)
+    .send({ messages: [] });
+
+  assert.equal(response.status, 400);
+});
+
+test("returns a valid ticket draft from the AI intake assistant", async () => {
+  const previousFetch = globalThis.fetch;
+  const previousApiKey = process.env.OPENROUTER_API_KEY;
+  const previousTicketModel = process.env.OPENROUTER_TICKET_MODEL;
+  let providerRequest;
+  process.env.OPENROUTER_API_KEY = "test-api-key";
+  process.env.OPENROUTER_TICKET_MODEL = "openai/fast-ticket-test";
+  globalThis.fetch = async (_url, options) => {
+    providerRequest = JSON.parse(options.body);
+    return new Response(
+      JSON.stringify({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                reply: "I have enough details, so I am creating your ticket now.",
+                ready: true,
+                draft: {
+                  subject: "Duplicate subscription charge",
+                  description: "The subscription payment was charged twice this morning.",
+                  category: "Billing",
+                  priority: "Medium",
+                },
+              }),
+            },
+          },
+        ],
+      }),
+      { status: 200, headers: { "Content-Type": "application/json" } },
+    );
+  };
+
+  try {
+    const response = await request(app)
+      .post("/api/ai/ticket-intake")
+      .set("Authorization", "Bearer " + customerToken)
+      .send({ messages: [{ role: "user", content: "My subscription was charged twice." }] });
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.ready, true);
+    assert.equal(response.body.draft.category, "Billing");
+    assert.equal(response.body.draft.priority, "Medium");
+    assert.equal(providerRequest.model, "openai/fast-ticket-test");
+    assert.equal(providerRequest.max_tokens, 500);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousApiKey === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = previousApiKey;
+    if (previousTicketModel === undefined) delete process.env.OPENROUTER_TICKET_MODEL;
+    else process.env.OPENROUTER_TICKET_MODEL = previousTicketModel;
+  }
+});
+
+test("falls back to local ticket intake when OpenRouter rejects the API key", async () => {
+  const previousFetch = globalThis.fetch;
+  const previousApiKey = process.env.OPENROUTER_API_KEY;
+  process.env.OPENROUTER_API_KEY = "rejected-intake-test-key";
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ error: { message: "User not found." } }), { status: 401 });
+
+  try {
+    const response = await request(app)
+      .post("/api/ai/ticket-intake")
+      .set("Authorization", "Bearer " + customerToken)
+      .send({
+        messages: [{ role: "user", content: "My subscription payment was charged twice this morning." }],
+      });
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.mode, "local-fallback");
+    assert.equal(response.body.ready, true);
+    assert.equal(response.body.draft.category, "Billing");
+    assert.match(response.body.reply, /AI service is unavailable/);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousApiKey === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = previousApiKey;
+  }
+});
+
+test("falls back to the knowledge base when OpenRouter chat is unavailable", async () => {
+  const previousFetch = globalThis.fetch;
+  const previousApiKey = process.env.OPENROUTER_API_KEY;
+  process.env.OPENROUTER_API_KEY = "rejected-chat-test-key";
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify({ error: { message: "User not found." } }), { status: 401 });
+
+  try {
+    const response = await request(app)
+      .post("/api/ai/chat")
+      .set("Authorization", "Bearer " + customerToken)
+      .send({ message: "qxzvplmbrt" });
+
+    assert.equal(response.status, 200);
+    assert.equal(response.body.mode, "local-fallback");
+    assert.match(response.body.reply, /AI service is unavailable/);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousApiKey === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = previousApiKey;
+  }
+});
+
+test("prevents staff from using customer AI ticket intake", async () => {
+  const response = await request(app)
+    .post("/api/ai/ticket-intake")
+    .set("Authorization", "Bearer " + agentToken)
+    .send({ messages: [{ role: "user", content: "My order is missing." }] });
+
+  assert.equal(response.status, 403);
 });
 
 test("returns FAQ articles for the customer portal", async () => {
@@ -195,4 +421,9 @@ test("provides analytics dashboard data for admin", async () => {
   assert.equal(response.body.csatAverage, "5.0");
   assert.equal(response.body.csatTotalReviews, 1);
   assert.ok(Array.isArray(response.body.agentLeaderboard));
+  const resolvedAgent = response.body.agentLeaderboard.find(
+    (agent) => agent.email === "agent-test@example.com",
+  );
+  assert.equal(resolvedAgent.resolvedCount, 1);
+  assert.equal(resolvedAgent.resolvedCustomerCount, 1);
 });

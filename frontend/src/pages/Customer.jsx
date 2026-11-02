@@ -31,6 +31,7 @@ function Customer() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [suggestingTitle, setSuggestingTitle] = useState(false);
+  const [ticketAssistantRequest, setTicketAssistantRequest] = useState(0);
 
   async function loadTickets() {
     try {
@@ -199,16 +200,25 @@ function Customer() {
             </p>
           </div>
 
-          <button
-            onClick={() => {
-              setSelected(null);
-              setView("create");
-            }}
-            className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-5 py-3 text-sm font-semibold text-white shadow-md shadow-emerald-900/10 transition hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-700"
-          >
-            <PlusCircle className="h-4 w-4" />
-            Create New Ticket
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setTicketAssistantRequest((request) => request + 1)}
+              className="inline-flex items-center gap-2 rounded-xl bg-teal-700 px-5 py-3 text-sm font-semibold text-white shadow-md shadow-teal-900/10 transition hover:bg-teal-800 dark:bg-teal-600 dark:hover:bg-teal-700"
+            >
+              <Sparkles className="h-4 w-4" />
+              Create with AI
+            </button>
+            <button
+              onClick={() => {
+                setSelected(null);
+                setView("create");
+              }}
+              className="inline-flex items-center gap-2 rounded-xl bg-emerald-700 px-5 py-3 text-sm font-semibold text-white shadow-md shadow-emerald-900/10 transition hover:bg-emerald-800 dark:bg-emerald-600 dark:hover:bg-emerald-700"
+            >
+              <PlusCircle className="h-4 w-4" />
+              Create New Ticket
+            </button>
+          </div>
         </div>
 
         {error && (
@@ -304,7 +314,14 @@ function Customer() {
         )}
       </main>
 
-      <ChatAssistant />
+      <ChatAssistant
+        ticketAssistantRequest={ticketAssistantRequest}
+        onTicketCreated={(ticket) => {
+          setSelected(ticket);
+          setView("details");
+          loadTickets();
+        }}
+      />
     </div>
   );
 }

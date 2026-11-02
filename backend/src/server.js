@@ -21,6 +21,7 @@ import {
   sendMessageNotificationEmail,
   sendTicketStatusChangedEmail,
   sendTicketResolvedEmail,
+  sendSlaNotificationEmail,
 } from "./services/emailService.js";
 import {
   computeInitialSLA,
@@ -28,8 +29,9 @@ import {
   onStaffReply,
   onTicketResolved,
 } from "./services/slaService.js";
-import { findLeastLoadedAgent } from "./services/assignmentService.js";
+import { findLeastLoadedAgent, getAgentWorkloads } from "./services/assignmentService.js";
 import { generateOpenRouterText } from "./services/openrouter.js";
+import { generateTicketIntake } from "./services/ticketIntakeService.js";
 import {
   DEFAULT_KB_ARTICLES,
   searchArticles,
@@ -184,6 +186,14 @@ const ticketSchema = new mongoose.Schema(
       resolvedAt: Date,
       isResponseBreached: { type: Boolean, default: false },
       isResolutionBreached: { type: Boolean, default: false },
+      notifications: {
+        responseAtRiskSent: { type: Boolean, default: false },
+        responseBreachedSent: { type: Boolean, default: false },
+        responseMetSent: { type: Boolean, default: false },
+        resolutionAtRiskSent: { type: Boolean, default: false },
+        resolutionBreachedSent: { type: Boolean, default: false },
+        resolutionMetSent: { type: Boolean, default: false },
+      },
     },
     csat: {
       rating: { type: Number, min: 1, max: 5 },
@@ -212,6 +222,83 @@ const articleSchema = new mongoose.Schema(
 const User = mongoose.model("User", userSchema);
 const Ticket = mongoose.model("Ticket", ticketSchema);
 const Article = mongoose.model("Article", articleSchema);
+
+const slaNotificationFields = {
+  responseAtRisk: "responseAtRiskSent",
+  responseBreached: "responseBreachedSent",
+  responseMet: "responseMetSent",
+  resolutionAtRisk: "resolutionAtRiskSent",
+  resolutionBreached: "resolutionBreachedSent",
+  resolutionMet: "resolutionMetSent",
+};
+let slaNotificationCheckRunning = false;
+
+async function notifySlaEvent(ticket, event) {
+  const field = slaNotificationFields[event];
+  if (!field || !ticket.sla || ticket.sla.notifications?.[field]) return false;
+
+  const result = await sendSlaNotificationEmail(ticket, ticket.customer, event);
+  if (!result) return false;
+
+  ticket.sla.notifications ||= {};
+  ticket.sla.notifications[field] = true;
+  if (process.env.MONGO_URI) await ticket.save();
+  return true;
+}
+
+async function checkSlaNotifications(now = Date.now()) {
+  if (slaNotificationCheckRunning) return;
+  slaNotificationCheckRunning = true;
+  try {
+    const tickets = process.env.MONGO_URI
+      ? await Ticket.find({ status: { $nin: ["Resolved", "Closed"] }, "sla.responseDue": { $exists: true } })
+          .populate("customer")
+      : memory.tickets.filter((ticket) => !["Resolved", "Closed"].includes(ticket.status) && ticket.sla?.responseDue);
+
+    for (const ticket of tickets) {
+      const sla = ticket.sla;
+      const responseDue = new Date(sla.responseDue).getTime();
+      const resolutionDue = new Date(sla.resolutionDue).getTime();
+      const notifications = sla.notifications || {};
+      const responseRemaining = responseDue - now;
+      const resolutionRemaining = resolutionDue - now;
+
+      if (!sla.firstResponseAt) {
+        if (responseRemaining <= 0) {
+          await notifySlaEvent(ticket, "responseBreached");
+        } else if (responseRemaining < 60 * 60 * 1000 && !notifications.responseAtRiskSent) {
+          await notifySlaEvent(ticket, "responseAtRisk");
+        }
+      }
+
+      if (resolutionRemaining <= 0) {
+        await notifySlaEvent(ticket, "resolutionBreached");
+      } else if (resolutionRemaining < 2 * 60 * 60 * 1000 && !notifications.resolutionAtRiskSent) {
+        await notifySlaEvent(ticket, "resolutionAtRisk");
+      }
+    }
+  } finally {
+    slaNotificationCheckRunning = false;
+  }
+}
+
+async function notifyFirstResponseSla(ticket) {
+  if (!ticket.sla?.firstResponseAt) return;
+  const wasMet = new Date(ticket.sla.firstResponseAt).getTime() <= new Date(ticket.sla.responseDue).getTime();
+  await notifySlaEvent(ticket, wasMet ? "responseMet" : "responseBreached");
+}
+
+async function notifyResolutionSla(ticket) {
+  if (!ticket.sla?.resolvedAt) return;
+  if (
+    !ticket.sla.firstResponseAt &&
+    Date.now() > new Date(ticket.sla.responseDue).getTime()
+  ) {
+    await notifySlaEvent(ticket, "responseBreached");
+  }
+  const wasMet = new Date(ticket.sla.resolvedAt).getTime() <= new Date(ticket.sla.resolutionDue).getTime();
+  await notifySlaEvent(ticket, wasMet ? "resolutionMet" : "resolutionBreached");
+}
 
 const publicUser = (user) => {
   if (!user) return null;
@@ -248,6 +335,22 @@ function notifyStaffAboutNewTicket(ticket, customer) {
     const recipients = staff.filter((item) => item.email?.toLowerCase() !== assignedEmail);
     await Promise.all(recipients.map((item) => sendNewTicketStaffEmail(item, ticket, customer)));
   })().catch((error) => console.error("New ticket staff notification failed:", error.message));
+}
+
+function notifyStaffAboutCustomerReply(ticket, message, customer) {
+  void (async () => {
+    const assigned = ticket.assignedAgent;
+    const recipients = assigned?.email
+      ? [assigned]
+      : process.env.MONGO_URI
+      ? await User.find({ role: { $in: ["agent", "admin"] }, active: true })
+      : memory.users.filter((item) => ["agent", "admin"].includes(item.role) && item.active);
+    await Promise.all(
+      recipients.map((recipient) =>
+        sendMessageNotificationEmail(ticket, message, customer, recipient),
+      ),
+    );
+  })().catch((error) => console.error("Customer reply notification failed:", error.message));
 }
 
 const normalizeTicket = (ticket, includeNotes = false) => {
@@ -464,6 +567,34 @@ app.post("/api/ai/suggest-title", auth, async (req, res) => {
   }
 });
 
+app.post("/api/ai/ticket-intake", auth, roles("customer"), async (req, res) => {
+  const { messages } = req.body;
+  if (
+    !Array.isArray(messages) ||
+    messages.length < 1 ||
+    messages.length > 20 ||
+    messages[messages.length - 1]?.role !== "user" ||
+    messages.some(
+      (message) =>
+        !message ||
+        !["user", "assistant"].includes(message.role) ||
+        typeof message.content !== "string" ||
+        !message.content.trim() ||
+        message.content.length > (message.role === "user" ? 1000 : 1200),
+    )
+  ) {
+    return sendError(res, 400, "A valid customer conversation is required.");
+  }
+
+  try {
+    const result = await generateTicketIntake(messages, categories, priorities);
+    res.json(result);
+  } catch (error) {
+    console.error("AI ticket intake failed:", error.message);
+    sendError(res, 502, `AI ticket intake failed: ${error.message}`);
+  }
+});
+
 // AI RAG SEARCH
 app.post("/api/ai/rag-search", auth, async (req, res) => {
   const query = String(req.body.query || req.body.message || "").trim();
@@ -622,17 +753,27 @@ app.post("/api/ai/chat", auth, async (req, res) => {
         temperature: 0.2,
       });
 
-      return res.json({ reply, mode: "openrouter-general", sources: [] });
+      if (reply) return res.json({ reply, mode: "openrouter-general", sources: [] });
     }
 
     return res.json({
-      reply: ragResult.answer,
-      mode: "local-rag",
+      reply: process.env.OPENROUTER_API_KEY && !hasKnowledgeMatches
+        ? `The AI service is unavailable, so I can only provide this knowledge-base result for now. ${ragResult.answer}`
+        : ragResult.answer,
+      mode: process.env.OPENROUTER_API_KEY && !hasKnowledgeMatches
+        ? "local-fallback"
+        : "local-rag",
       sources: ragResult.sources,
     });
   } catch (error) {
     console.error("OpenRouter chat request failed:", error.message);
-    return sendError(res, 502, `OpenRouter chat request failed: ${error.message}`);
+    const articles = process.env.MONGO_URI ? await Article.find() : memory.articles;
+    const ragResult = await generateRAGAnswer(message, articles);
+    return res.json({
+      reply: `The AI service is unavailable, so I can only provide this knowledge-base result for now. ${ragResult.answer}`,
+      mode: "local-fallback",
+      sources: ragResult.sources,
+    });
   }
 });
 
@@ -729,13 +870,21 @@ app.get("/api/analytics/dashboard", auth, roles("agent", "admin"), async (req, r
   const allAgents = process.env.MONGO_URI
     ? await User.find({ role: "agent" })
     : memory.users.filter((u) => u.role === "agent");
+  const workloadMap = getAgentWorkloads(allAgents, allTickets);
 
   const agentLeaderboard = allAgents.map((agent) => {
     const agentId = String(agent._id || agent.id);
+    const workload = workloadMap.get(agentId);
     const assigned = allTickets.filter(
       (t) => String(t.assignedAgent?._id || t.assignedAgent?.id || t.assignedAgent) === agentId
     );
     const resolved = assigned.filter((t) => ["Resolved", "Closed"].includes(t.status));
+    const resolvedCustomerCount = new Set(
+      resolved
+        .map((ticket) => ticket.customer?._id || ticket.customer?.id || ticket.customer)
+        .filter(Boolean)
+        .map(String),
+    ).size;
     const ratings = assigned.filter((t) => t.csat?.rating).map((t) => t.csat.rating);
     const avgCsat = ratings.length ? (ratings.reduce((a, b) => a + b, 0) / ratings.length).toFixed(1) : "N/A";
 
@@ -743,8 +892,12 @@ app.get("/api/analytics/dashboard", auth, roles("agent", "admin"), async (req, r
       agentId,
       name: agent.name,
       email: agent.email,
+      active: agent.active,
+      activeCustomerCount: workload.customerCount,
+      activeTicketCount: workload.activeTicketCount,
       totalAssigned: assigned.length,
       resolvedCount: resolved.length,
+      resolvedCustomerCount,
       avgCsat,
     };
   });
@@ -953,6 +1106,11 @@ app.patch("/api/tickets/:id", auth, roles("agent", "admin"), async (req, res) =>
   } else if (statusChanged) {
     sendTicketStatusChangedEmail(finalTicket, finalTicket.customer, previousStatus);
   }
+  if (statusChanged && ["Resolved", "Closed"].includes(allowed.status)) {
+    void notifyResolutionSla(finalTicket).catch((error) =>
+      console.error("Ticket resolution SLA notification failed:", error.message),
+    );
+  }
   if (allowed.assignedAgent) {
     sendTicketAssignedEmail(finalTicket, finalTicket.assignedAgent);
   }
@@ -1076,13 +1234,21 @@ app.post("/api/tickets/:id/messages", auth, async (req, res) => {
 
   // Email notifications to counterpart
   const recipient = isStaff ? finalTicket.customer : finalTicket.assignedAgent;
-  if (recipient) {
+  if (isStaff && recipient) {
     sendMessageNotificationEmail(
       finalTicket,
       messagePayload,
       req.user,
       recipient,
       previousStatus !== finalTicket.status ? previousStatus : null
+    );
+  } else if (!isStaff) {
+    notifyStaffAboutCustomerReply(finalTicket, messagePayload, req.user);
+  }
+
+  if (isStaff) {
+    void notifyFirstResponseSla(finalTicket).catch((error) =>
+      console.error("Ticket first-response SLA notification failed:", error.message),
     );
   }
 
@@ -1171,7 +1337,7 @@ app.post("/api/tickets/:id/ai-analysis", auth, roles("agent", "admin"), async (r
     return res.json({ analysis, mode: "openrouter" });
   } catch (error) {
     console.error("AI ticket analysis failed:", error.message);
-    return sendError(res, 502, `OpenRouter ticket analysis failed: ${error.message}`);
+    return res.json({ analysis: fallback, mode: "local-fallback" });
   }
 });
 
@@ -1193,11 +1359,19 @@ async function start() {
     );
   }
   if (process.env.NODE_ENV !== "test") {
+    const runSlaNotifications = () => {
+      void checkSlaNotifications().catch((error) =>
+        console.error("SLA notification check failed:", error.message),
+      );
+    };
+    runSlaNotifications();
+    const slaNotificationTimer = setInterval(runSlaNotifications, 60 * 1000);
+    slaNotificationTimer.unref();
     server.listen(port, () => console.log(`SyncBot API & WebSockets listening on http://localhost:${port}`));
   }
 }
 
-export { app, server, io, memory, start };
+export { app, server, io, memory, start, checkSlaNotifications };
 
 if (process.env.NODE_ENV !== "test") {
   start().catch((error) => {
